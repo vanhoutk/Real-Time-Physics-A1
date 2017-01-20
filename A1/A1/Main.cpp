@@ -16,22 +16,18 @@
 
 #include "Antons_maths_funcs.h" // Anton's maths functions
 #include "Camera.h"
-//#include "Shader.h"
+#include "Mesh.h"
+#include "Shader_Functions.h"
 #include "time.h"
-
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-
- 
-
 
 /*
  *	Globally defined variables and constants
  */
 #define BUFFER_OFFSET(i) ((char *)NULL + (i))  // Macro for indexing vertex buffer
 
-#define NUM_MESHES 1
-#define NUM_SHADERS 1
+#define NUM_MESHES   1
+#define NUM_SHADERS	 1
+#define NUM_TEXTURES 1
 
 using namespace std;
 
@@ -39,26 +35,31 @@ bool firstMouse = true;
 bool keys[1024];
 Camera camera(vec3(0.0f, 0.0f, 3.0f));
 DWORD lastTime = 0;
+enum Shaders { SKYBOX, SPHERE };
 GLfloat deltaTime = 0.0f;
 GLfloat lastX = 400, lastY = 300;
 GLuint cubemapTexture;
 GLuint shaderProgramID[NUM_SHADERS];
 GLuint skyboxVAO, skyboxVBO;
+GLuint sphereTextureID, sphereVAO;
 int screenWidth = 1000;
 int screenHeight = 800;
+Mesh skybox;
+Mesh sphere;
 
-/*
- *	Resource Locations
- */
-const char * model_files[NUM_MESHES] = { "../Meshes/sphere.obj" };
-const char * vertexShaderNames[] = { "../Shaders/SkyboxVertexShader.txt"};
-const char * fragmentShaderNames[] = { "../Shaders/SkyboxFragmentShader.txt" };
-enum Shaders {SKYBOX};
+// | Resource Locations
+const char * meshFiles[NUM_MESHES] = { "../Meshes/sphere.obj" };
+const char * textureFiles[NUM_TEXTURES] = { "../Textures/particle.png" };
+const char * vertexShaderNames[] = { "../Shaders/SkyboxVertexShader.txt", "../Shaders/ParticleVertexShader.txt"};
+const char * fragmentShaderNames[] = { "../Shaders/SkyboxFragmentShader.txt", "../Shaders/ParticleFragmentShader.txt" };
 
-//Shader skyboxShader("../Shaders/SkyboxVertexShader.txt", "../Shaders/SkyboxFragmentShader.txt");
 
-// Function Prototypes
-GLuint loadCubemap(vector<const GLchar*> faces);
+/*struct mesh {
+	GLuint num_vertices;
+	vector<float> vertex_positions;
+	vector<float> normals;
+	vector<float> tex_coords;
+};*/
 
 struct Particle {
 	vec3 position;
@@ -67,209 +68,6 @@ struct Particle {
 	GLfloat life;
 	vec3 force;
 };
-
-void setupSkybox()
-{
-	GLfloat skyboxVertices[] = 
-	{
-		// Positions          
-		-10.0f,  10.0f, -10.0f,
-		-10.0f, -10.0f, -10.0f,
-		 10.0f, -10.0f, -10.0f,
-		 10.0f, -10.0f, -10.0f,
-		 10.0f,  10.0f, -10.0f,
-		-10.0f,  10.0f, -10.0f,
-
-		-10.0f, -10.0f,  10.0f,
-		-10.0f, -10.0f, -10.0f,
-		-10.0f,  10.0f, -10.0f,
-		-10.0f,  10.0f, -10.0f,
-		-10.0f,  10.0f,  10.0f,
-		-10.0f, -10.0f,  10.0f,
-
-		10.0f, -10.0f, -10.0f,
-		10.0f, -10.0f,  10.0f,
-		10.0f,  10.0f,  10.0f,
-		10.0f,  10.0f,  10.0f,
-		10.0f,  10.0f, -10.0f,
-		10.0f, -10.0f, -10.0f,
-
-		-10.0f, -10.0f,  10.0f,
-		-10.0f,  10.0f,  10.0f,
-		 10.0f,  10.0f,  10.0f,
-		 10.0f,  10.0f,  10.0f,
-		 10.0f, -10.0f,  10.0f,
-		-10.0f, -10.0f,  10.0f,
-
-		-10.0f,  10.0f, -10.0f,
-		 10.0f,  10.0f, -10.0f,
-		 10.0f,  10.0f,  10.0f,
-		 10.0f,  10.0f,  10.0f,
-		-10.0f,  10.0f,  10.0f,
-		-10.0f,  10.0f, -10.0f,
-
-		-10.0f, -10.0f, -10.0f,
-		-10.0f, -10.0f,  10.0f,
-		 10.0f, -10.0f, -10.0f,
-		 10.0f, -10.0f, -10.0f,
-		-10.0f, -10.0f,  10.0f,
-		 10.0f, -10.0f,  10.0f
-	};
-
-	glGenVertexArrays(1, &skyboxVAO);
-	glGenBuffers(1, &skyboxVBO);
-	glBindVertexArray(skyboxVAO);
-	glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
-	glBindVertexArray(0);
-
-	vector<const GLchar*> faces;
-	faces.push_back("../Textures/SkyboxRight.png");
-	faces.push_back("../Textures/SkyboxLeft.png");
-	faces.push_back("../Textures/SkyboxUp.png");
-	faces.push_back("../Textures/SkyboxDown.png");
-	faces.push_back("../Textures/SkyboxBack.png");
-	faces.push_back("../Textures/SkyboxFront.png");
-	cubemapTexture = loadCubemap(faces);
-}
-
-// Loads a cubemap texture from 6 individual texture faces
-// Order should be:
-// +X (right)
-// -X (left)
-// +Y (top)
-// -Y (bottom)
-// +Z (front) 
-// -Z (back)
-GLuint loadCubemap(vector<const GLchar*> faces)
-{
-	GLuint textureID;
-	glActiveTexture(GL_TEXTURE0);
-	glGenTextures(1, &textureID);
-
-	int width, height;
-	unsigned char* image;
-
-	glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
-	for (GLuint i = 0; i < faces.size(); i++)
-	{
-		image = stbi_load(faces[i], &width, &height, 0, STBI_rgb);
-		if (!image) {
-			fprintf(stderr, "ERROR: could not load %s\n", faces[i]);
-			return false;
-		}
-
-		glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, image);
-		free(image);
-	}
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-	glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-
-	return textureID;
-}
-
-/*
- *	Shader Functions
- */
-#pragma region SHADER_FUNCTIONS
-
-// Create a NULL-terminated string by reading the provided file
-char* readShaderSource(const char* shaderFile) 
-{
-	FILE* fp;
-	fopen_s(&fp, shaderFile, "r");
-
-	if (fp == NULL) { return NULL; }
-
-	fseek(fp, 0L, SEEK_END);
-	long size = ftell(fp);
-
-	fseek(fp, 0L, SEEK_SET);
-	char* buf = new char[size + 1];
-	fread(buf, 1, size, fp);
-	buf[size] = '\0';
-
-	fclose(fp);
-
-	return buf;
-}
-
-static void AddShader(GLuint ShaderProgram, const char* pShaderText, GLenum ShaderType)
-{
-	// create a shader object
-	GLuint ShaderObj = glCreateShader(ShaderType);
-
-	if (ShaderObj == 0) {
-		fprintf(stderr, "Error creating shader type %d\n", ShaderType);
-		exit(0);
-	}
-	const char* pShaderSource = readShaderSource(pShaderText);
-
-	// Bind the source code to the shader, this happens before compilation
-	glShaderSource(ShaderObj, 1, (const GLchar**)&pShaderSource, NULL);
-	// compile the shader and check for errors
-	glCompileShader(ShaderObj);
-	GLint success;
-	// check for shader related errors using glGetShaderiv
-	glGetShaderiv(ShaderObj, GL_COMPILE_STATUS, &success);
-	if (!success) {
-		GLchar InfoLog[1024];
-		glGetShaderInfoLog(ShaderObj, 1024, NULL, InfoLog);
-		fprintf(stderr, "Error compiling shader type %d: '%s'\n", ShaderType, InfoLog);
-		exit(1);
-	}
-	// Attach the compiled shader object to the program object
-	glAttachShader(ShaderProgram, ShaderObj);
-}
-
-GLuint CompileShaders()
-{
-	//Start the process of setting up our shaders by creating a program ID
-	//Note: we will link all the shaders together into this ID
-	for (int i = 0; i < NUM_SHADERS; i++) {
-		shaderProgramID[i] = glCreateProgram();
-		if (shaderProgramID[i] == 0) {
-			fprintf(stderr, "Error creating shader program\n");
-			exit(1);
-		}
-		// Create two shader objects, one for the vertex, and one for the fragment shader
-		AddShader(shaderProgramID[i], vertexShaderNames[i], GL_VERTEX_SHADER);
-		AddShader(shaderProgramID[i], fragmentShaderNames[i], GL_FRAGMENT_SHADER);
-
-		GLint Success = 0;
-		GLchar ErrorLog[1024] = { 0 };
-		// After compiling all shader objects and attaching them to the program, we can finally link it
-		glLinkProgram(shaderProgramID[i]);
-		// check for program related errors using glGetProgramiv
-		glGetProgramiv(shaderProgramID[i], GL_LINK_STATUS, &Success);
-		if (Success == 0) {
-			glGetProgramInfoLog(shaderProgramID[i], sizeof(ErrorLog), NULL, ErrorLog);
-			fprintf(stderr, "Error linking shader program: '%s'\n", ErrorLog);
-			exit(1);
-		}
-
-		// program has been successfully linked but needs to be validated to check whether the program can execute given the current pipeline state
-		glValidateProgram(shaderProgramID[i]);
-		// check for program related errors using glGetProgramiv
-		glGetProgramiv(shaderProgramID[i], GL_VALIDATE_STATUS, &Success);
-		if (!Success) {
-			glGetProgramInfoLog(shaderProgramID[i], sizeof(ErrorLog), NULL, ErrorLog);
-			fprintf(stderr, "Invalid shader program: '%s'\n", ErrorLog);
-			exit(1);
-		}
-		// Finally, use the linked shader program
-		// Note: this program will stay in effect for all draw calls until you replace it with another or explicitly disable its use
-		glUseProgram(shaderProgramID[i]);
-	}
-
-}
-#pragma endregion
 
 void display() 
 {
@@ -280,35 +78,37 @@ void display()
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	// Draw skybox first
-	//glDepthMask(GL_FALSE);// Remember to turn depth writing off
-	//skyboxShader.Use();
 	mat4 view = camera.GetViewMatrix(); // TODO: Figure out how to remove any translation component of the view matrix
 	mat4 projection = perspective(camera.Zoom, (float)screenWidth / (float)screenHeight, 0.1f, 100.0f);
-	/*glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[0], "view"), 1, GL_FALSE, view.m);
-	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[0], "projection"), 1, GL_FALSE, projection.m);*/
-	
-	int vLocation = glGetUniformLocation(shaderProgramID[0], "view");
-	int pLocation = glGetUniformLocation(shaderProgramID[0], "proj");
 
-	glUseProgram(shaderProgramID[0]);
-	glUniformMatrix4fv(vLocation, 1, GL_FALSE, view.m);
-	glUniformMatrix4fv(pLocation, 1, GL_FALSE, projection.m);
+	glUseProgram(shaderProgramID[SKYBOX]);
+	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SKYBOX], "view"), 1, GL_FALSE, view.m);
+	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SKYBOX], "proj"), 1, GL_FALSE, projection.m);
 	
-	// skybox cube
-	/*glBindVertexArray(skyboxVAO);
-	glActiveTexture(GL_TEXTURE0);
-	glUniform1i(glGetUniformLocation(shaderProgramID[0], "skybox"), 0);
-	glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
-	glDrawArrays(GL_TRIANGLES, 0, 36);
-	glBindVertexArray(0);
-	glDepthMask(GL_TRUE);*/
-
 	glDepthMask(GL_FALSE);
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
 	glBindVertexArray(skyboxVAO);
 	glDrawArrays(GL_TRIANGLES, 0, 36);
 	glDepthMask(GL_TRUE);
+
+	mat4 model = identity_mat4();
+
+	glUseProgram(shaderProgramID[SPHERE]);
+	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SPHERE], "view"), 1, GL_FALSE, view.m);
+	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SPHERE], "proj"), 1, GL_FALSE, projection.m);
+	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SPHERE], "model"), 1, GL_FALSE, model.m);
+
+	vec4 color = vec4(20.0f, 20.0f, 0.0f, 0.0f);
+
+	glUniform4fv(glGetUniformLocation(shaderProgramID[SPHERE], "ParticleColor"), 1, color.v);
+	
+	glBindTexture(GL_TEXTURE_2D, sphereTextureID);
+	glUniform1i(glGetUniformLocation(shaderProgramID[SPHERE], "TexCoords"), 0);
+
+	glBindVertexArray(sphereVAO);
+
+	glDrawArrays(GL_TRIANGLES, 0, sphere.vertex_count);
 
 	glutSwapBuffers();
 }
@@ -348,9 +148,11 @@ void updateScene()
 void init()
 {
 	// Compile the shaders
-	CompileShaders();
-	setupSkybox();
-
+	CompileShaders(NUM_SHADERS, shaderProgramID, vertexShaderNames, fragmentShaderNames);
+	skybox.setupSkybox(&skyboxVAO, &skyboxVBO, &cubemapTexture);
+	sphere = Mesh(shaderProgramID[SPHERE]);
+	sphere.generateObjectBufferMesh(sphereVAO, meshFiles[0]);
+	sphere.loadTexture(textureFiles[0], &sphereTextureID);
 }
 
 /*
