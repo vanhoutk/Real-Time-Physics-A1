@@ -15,6 +15,8 @@
 #include <windows.h>
 
 #include "Antons_maths_funcs.h" // Anton's maths functions
+#include "Camera.h"
+//#include "Shader.h"
 #include "time.h"
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -33,16 +35,30 @@
 
 using namespace std;
 
+bool firstMouse = true;
+bool keys[1024];
+Camera camera(vec3(0.0f, 0.0f, 3.0f));
+DWORD lastTime = 0;
+GLfloat deltaTime = 0.0f;
+GLfloat lastX = 400, lastY = 300;
+GLuint cubemapTexture;
 GLuint shaderProgramID[NUM_SHADERS];
-int width = 1000;
-int height = 800;
+GLuint skyboxVAO, skyboxVBO;
+int screenWidth = 1000;
+int screenHeight = 800;
 
 /*
  *	Resource Locations
  */
 const char * model_files[NUM_MESHES] = { "../Meshes/sphere.obj" };
-const char * vertexShaderName[] = { "../Shaders/skybox.vert.txt", "../Shaders/phong.vert.txt.", "../Shaders/fresnel.vert.txt" };
-const char * fragmentShaderName[] = { "../Shaders/skybox.frag.txt", "../Shaders/phong.frag.txt", "../Shaders/fresnel.frag.txt" };
+const char * vertexShaderNames[] = { "../Shaders/SkyboxVertexShader.txt"};
+const char * fragmentShaderNames[] = { "../Shaders/SkyboxFragmentShader.txt" };
+enum Shaders {SKYBOX};
+
+//Shader skyboxShader("../Shaders/SkyboxVertexShader.txt", "../Shaders/SkyboxFragmentShader.txt");
+
+// Function Prototypes
+GLuint loadCubemap(vector<const GLchar*> faces);
 
 struct Particle {
 	vec3 position;
@@ -52,6 +68,112 @@ struct Particle {
 	vec3 force;
 };
 
+void setupSkybox()
+{
+	GLfloat skyboxVertices[] = 
+	{
+		// Positions          
+		-10.0f,  10.0f, -10.0f,
+		-10.0f, -10.0f, -10.0f,
+		 10.0f, -10.0f, -10.0f,
+		 10.0f, -10.0f, -10.0f,
+		 10.0f,  10.0f, -10.0f,
+		-10.0f,  10.0f, -10.0f,
+
+		-10.0f, -10.0f,  10.0f,
+		-10.0f, -10.0f, -10.0f,
+		-10.0f,  10.0f, -10.0f,
+		-10.0f,  10.0f, -10.0f,
+		-10.0f,  10.0f,  10.0f,
+		-10.0f, -10.0f,  10.0f,
+
+		10.0f, -10.0f, -10.0f,
+		10.0f, -10.0f,  10.0f,
+		10.0f,  10.0f,  10.0f,
+		10.0f,  10.0f,  10.0f,
+		10.0f,  10.0f, -10.0f,
+		10.0f, -10.0f, -10.0f,
+
+		-10.0f, -10.0f,  10.0f,
+		-10.0f,  10.0f,  10.0f,
+		 10.0f,  10.0f,  10.0f,
+		 10.0f,  10.0f,  10.0f,
+		 10.0f, -10.0f,  10.0f,
+		-10.0f, -10.0f,  10.0f,
+
+		-10.0f,  10.0f, -10.0f,
+		 10.0f,  10.0f, -10.0f,
+		 10.0f,  10.0f,  10.0f,
+		 10.0f,  10.0f,  10.0f,
+		-10.0f,  10.0f,  10.0f,
+		-10.0f,  10.0f, -10.0f,
+
+		-10.0f, -10.0f, -10.0f,
+		-10.0f, -10.0f,  10.0f,
+		 10.0f, -10.0f, -10.0f,
+		 10.0f, -10.0f, -10.0f,
+		-10.0f, -10.0f,  10.0f,
+		 10.0f, -10.0f,  10.0f
+	};
+
+	glGenVertexArrays(1, &skyboxVAO);
+	glGenBuffers(1, &skyboxVBO);
+	glBindVertexArray(skyboxVAO);
+	glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
+	glBindVertexArray(0);
+
+	vector<const GLchar*> faces;
+	faces.push_back("../Textures/SkyboxRight.png");
+	faces.push_back("../Textures/SkyboxLeft.png");
+	faces.push_back("../Textures/SkyboxUp.png");
+	faces.push_back("../Textures/SkyboxDown.png");
+	faces.push_back("../Textures/SkyboxBack.png");
+	faces.push_back("../Textures/SkyboxFront.png");
+	cubemapTexture = loadCubemap(faces);
+}
+
+// Loads a cubemap texture from 6 individual texture faces
+// Order should be:
+// +X (right)
+// -X (left)
+// +Y (top)
+// -Y (bottom)
+// +Z (front) 
+// -Z (back)
+GLuint loadCubemap(vector<const GLchar*> faces)
+{
+	GLuint textureID;
+	glActiveTexture(GL_TEXTURE0);
+	glGenTextures(1, &textureID);
+
+	int width, height;
+	unsigned char* image;
+
+	glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
+	for (GLuint i = 0; i < faces.size(); i++)
+	{
+		image = stbi_load(faces[i], &width, &height, 0, STBI_rgb);
+		if (!image) {
+			fprintf(stderr, "ERROR: could not load %s\n", faces[i]);
+			return false;
+		}
+
+		glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, image);
+		free(image);
+	}
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+
+	return textureID;
+}
+
 /*
  *	Shader Functions
  */
@@ -60,7 +182,8 @@ struct Particle {
 // Create a NULL-terminated string by reading the provided file
 char* readShaderSource(const char* shaderFile) 
 {
-	FILE* fp = fopen(shaderFile, "rb"); //!->Why does binary flag "RB" work and not "R"... wierd msvc thing?
+	FILE* fp;
+	fopen_s(&fp, shaderFile, "r");
 
 	if (fp == NULL) { return NULL; }
 
@@ -116,8 +239,8 @@ GLuint CompileShaders()
 			exit(1);
 		}
 		// Create two shader objects, one for the vertex, and one for the fragment shader
-		AddShader(shaderProgramID[i], vertexShaderName[i], GL_VERTEX_SHADER);
-		AddShader(shaderProgramID[i], fragmentShaderName[i], GL_FRAGMENT_SHADER);
+		AddShader(shaderProgramID[i], vertexShaderNames[i], GL_VERTEX_SHADER);
+		AddShader(shaderProgramID[i], fragmentShaderNames[i], GL_FRAGMENT_SHADER);
 
 		GLint Success = 0;
 		GLchar ErrorLog[1024] = { 0 };
@@ -153,14 +276,54 @@ void display()
 	// Tell GL to only draw onto a pixel if the shape is closer to the viewer
 	glEnable(GL_DEPTH_TEST);	// Enable depth-testing
 	glDepthFunc(GL_LESS);		// Depth-testing interprets a smaller value as "closer"
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClearColor(10.0f, 10.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	// Draw skybox first
+	//glDepthMask(GL_FALSE);// Remember to turn depth writing off
+	//skyboxShader.Use();
+	mat4 view = camera.GetViewMatrix(); // TODO: Figure out how to remove any translation component of the view matrix
+	mat4 projection = perspective(camera.Zoom, (float)screenWidth / (float)screenHeight, 0.1f, 100.0f);
+	/*glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[0], "view"), 1, GL_FALSE, view.m);
+	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[0], "projection"), 1, GL_FALSE, projection.m);*/
+	
+	int vLocation = glGetUniformLocation(shaderProgramID[0], "view");
+	int pLocation = glGetUniformLocation(shaderProgramID[0], "proj");
+
+	glUseProgram(shaderProgramID[0]);
+	glUniformMatrix4fv(vLocation, 1, GL_FALSE, view.m);
+	glUniformMatrix4fv(pLocation, 1, GL_FALSE, projection.m);
+	
+	// skybox cube
+	/*glBindVertexArray(skyboxVAO);
+	glActiveTexture(GL_TEXTURE0);
+	glUniform1i(glGetUniformLocation(shaderProgramID[0], "skybox"), 0);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+	glDrawArrays(GL_TRIANGLES, 0, 36);
+	glBindVertexArray(0);
+	glDepthMask(GL_TRUE);*/
+
+	glDepthMask(GL_FALSE);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+	glBindVertexArray(skyboxVAO);
+	glDrawArrays(GL_TRIANGLES, 0, 36);
+	glDepthMask(GL_TRUE);
 
 	glutSwapBuffers();
 }
 
 void processInput()
-{}
+{
+	if(keys[GLUT_KEY_UP])
+		camera.ProcessKeyboard(FORWARD, deltaTime);
+	if(keys[GLUT_KEY_DOWN])
+		camera.ProcessKeyboard(BACKWARD, deltaTime);
+	if (keys[GLUT_KEY_LEFT])
+		camera.ProcessKeyboard(LEFT, deltaTime);
+	if (keys[GLUT_KEY_RIGHT])
+		camera.ProcessKeyboard(RIGHT, deltaTime);
+}
 
 void processForces()
 {
@@ -172,6 +335,10 @@ void processForces()
 
 void updateScene()
 {
+	DWORD  current_time = timeGetTime();
+	float  deltaTime = (current_time - lastTime) * 0.001f;
+	lastTime = current_time;
+
 	processInput();
 	processForces();
 	// Draw the next frame
@@ -182,7 +349,7 @@ void init()
 {
 	// Compile the shaders
 	CompileShaders();
-
+	setupSkybox();
 
 }
 
@@ -197,16 +364,35 @@ void releaseNormalKeys(unsigned char key, int x, int y)
 {}
 
 void pressSpecialKeys(int key, int x, int y)
-{}
+{
+	keys[key] = true;
+}
 
 void releaseSpecialKeys(int key, int x, int y)
-{}
+{
+	keys[key] = false;
+}
 
 void mouseClick(int button, int state, int x, int y)
 {}
 
 void processMouse(int x, int y)
-{}
+{
+	if (firstMouse)
+	{
+		lastX = x;
+		lastY = y;
+		firstMouse = false;
+	}
+
+	GLfloat xoffset = x - lastX;
+	GLfloat yoffset = lastY - y;
+
+	lastX = x;
+	lastY = y;
+
+	camera.ProcessMouseMovement(xoffset, yoffset);
+}
 
 void mouseWheel(int button, int dir, int x, int y)
 {}
@@ -222,8 +408,8 @@ int main(int argc, char** argv)
 	// Set up the window
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
-	glutInitWindowSize(width, height);
-	glutInitWindowPosition((glutGet(GLUT_SCREEN_WIDTH) - width) / 2, (glutGet(GLUT_SCREEN_HEIGHT) - height) / 4);
+	glutInitWindowSize(screenWidth, screenHeight);
+	glutInitWindowPosition((glutGet(GLUT_SCREEN_WIDTH) - screenWidth) / 2, (glutGet(GLUT_SCREEN_HEIGHT) - screenHeight) / 4);
 	glutCreateWindow("Particle System");
 
 	// Glut display and update functions
