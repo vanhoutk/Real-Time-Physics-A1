@@ -28,14 +28,14 @@ public:
 	int vertex_count;
 
 	Mesh();
-	Mesh(GLuint shaderID);
+	Mesh(GLuint* shaderID);
 	bool loadMesh(const char* file_name);
 	void generateObjectBufferMesh(GLuint &vao, const char* file_name);
 	bool loadTexture(const char* file_name, GLuint* texture_id);
 	void setupSkybox(GLuint* skyboxVAO, GLuint* skyboxVBO, GLuint* cubemapTexture);
 	GLuint loadCubemap(vector<const GLchar*> faces);
 private:
-	GLuint shaderProgramID;
+	GLuint* shaderProgramID;
 	
 	vector<float> vertex_positions;
 	vector<float> normals;
@@ -45,7 +45,7 @@ private:
 Mesh::Mesh()
 {}
 
-Mesh::Mesh(GLuint shaderID)
+Mesh::Mesh(GLuint* shaderID)
 {
 	shaderProgramID = shaderID;
 }
@@ -53,7 +53,7 @@ Mesh::Mesh(GLuint shaderID)
 bool Mesh::loadMesh(const char* file_name)
 {
 	const aiScene* scene = aiImportFile(file_name, aiProcess_Triangulate | aiProcess_CalcTangentSpace); // TRIANGLES!
-	fprintf(stderr, "ERROR: reading mesh %s\n", file_name);
+	//fprintf(stderr, "ERROR: reading mesh %s\n", file_name);
 	if (!scene) {
 		fprintf(stderr, "ERROR: reading mesh %s\n", file_name);
 		return false;
@@ -111,9 +111,9 @@ void Mesh::generateObjectBufferMesh(GLuint &vao, const char* file_name)
 {
 	// Load mesh and copy into buffers
 	loadMesh(file_name);
-	GLuint loc1 = glGetAttribLocation(shaderProgramID, "vertex_position");
-	GLuint loc2 = glGetAttribLocation(shaderProgramID, "vertex_normal");
-	GLuint loc3 = glGetAttribLocation(shaderProgramID, "vertex_texture");
+	GLuint loc1 = glGetAttribLocation(*shaderProgramID, "vertex_position");
+	GLuint loc2 = glGetAttribLocation(*shaderProgramID, "vertex_normal");
+	GLuint loc3 = glGetAttribLocation(*shaderProgramID, "vertex_texture");
 
 	unsigned int position_vbo = 0;
 	glGenBuffers(1, &position_vbo);

@@ -26,7 +26,7 @@
 #define BUFFER_OFFSET(i) ((char *)NULL + (i))  // Macro for indexing vertex buffer
 
 #define NUM_MESHES   1
-#define NUM_SHADERS	 1
+#define NUM_SHADERS	 2
 #define NUM_TEXTURES 1
 
 using namespace std;
@@ -48,10 +48,10 @@ Mesh skybox;
 Mesh sphere;
 
 // | Resource Locations
-const char * meshFiles[NUM_MESHES] = { "../Meshes/sphere.obj" };
+const char * meshFiles[NUM_MESHES] = { "../Meshes/sphere2.dae" };
 const char * textureFiles[NUM_TEXTURES] = { "../Textures/particle.png" };
-const char * vertexShaderNames[] = { "../Shaders/SkyboxVertexShader.txt", "../Shaders/ParticleVertexShader.txt"};
-const char * fragmentShaderNames[] = { "../Shaders/SkyboxFragmentShader.txt", "../Shaders/ParticleFragmentShader.txt" };
+const char * vertexShaderNames[] = { "../Shaders/SkyboxVertexShader.txt", "../Shaders/noTextureVertexShader.txt"};
+const char * fragmentShaderNames[] = { "../Shaders/SkyboxFragmentShader.txt", "../Shaders/noTextureFragmentShader.txt" };
 
 
 /*struct mesh {
@@ -74,49 +74,91 @@ void display()
 	// Tell GL to only draw onto a pixel if the shape is closer to the viewer
 	glEnable(GL_DEPTH_TEST);	// Enable depth-testing
 	glDepthFunc(GL_LESS);		// Depth-testing interprets a smaller value as "closer"
-	glClearColor(10.0f, 10.0f, 0.0f, 1.0f);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	// Draw skybox first
 	mat4 view = camera.GetViewMatrix(); // TODO: Figure out how to remove any translation component of the view matrix
 	mat4 projection = perspective(camera.Zoom, (float)screenWidth / (float)screenHeight, 0.1f, 100.0f);
 
-	glUseProgram(shaderProgramID[SKYBOX]);
-	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SKYBOX], "view"), 1, GL_FALSE, view.m);
-	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SKYBOX], "proj"), 1, GL_FALSE, projection.m);
+	//glUseProgram(shaderProgramID[SKYBOX]);
+	//glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SKYBOX], "view"), 1, GL_FALSE, view.m);
+	//glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SKYBOX], "proj"), 1, GL_FALSE, projection.m);
 	
-	glDepthMask(GL_FALSE);
+	/*glDepthMask(GL_FALSE);
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
 	glBindVertexArray(skyboxVAO);
 	glDrawArrays(GL_TRIANGLES, 0, 36);
 	glDepthMask(GL_TRUE);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, 0);*/
 
-	mat4 model = identity_mat4();
+	// light properties
+	vec3 Ls = vec3(0.0f, 0.0f, 0.0f);	//Specular Reflected Light
+	vec3 Ld = vec3(1.0f, 1.0f, 1.0f);	//Diffuse Surface Reflectance
+	vec3 La = vec3(1.0f, 1.0f, 1.0f);	//Ambient Reflected Light
+	vec3 light = vec3(5.0f, 5.0f, -5.0f);//light source location
+	vec3 coneDirection = light + vec3(0.0f, -1.0f, 0.0f);
+	float coneAngle = 40.0f;
+	// object colour
+	vec3 Ks = vec3(0.0f, 0.0f, 0.0f); // specular reflectance
+	vec3 Kd = vec3(247.0f / 255.0f, 194.0f / 255.0f, 87.0f / 255.0f);
+	vec3 Ka = vec3(247.0f / 255.0f, 194.0f / 255.0f, 87.0f / 255.0f); // ambient reflectance
+	float specular_exponent = 0.5f; //specular exponent - size of the specular elements
 
 	glUseProgram(shaderProgramID[SPHERE]);
+	glBindVertexArray(sphereVAO);
+	glUniform3fv(glGetUniformLocation(shaderProgramID[SPHERE], "Ls"), 1, Ls.v);
+	glUniform3fv(glGetUniformLocation(shaderProgramID[SPHERE], "Ld"), 1, Ld.v);
+	glUniform3fv(glGetUniformLocation(shaderProgramID[SPHERE], "La"), 1, La.v);
+	glUniform3fv(glGetUniformLocation(shaderProgramID[SPHERE], "Ks"), 1, Ks.v);
+	glUniform3fv(glGetUniformLocation(shaderProgramID[SPHERE], "Kd"), 1, Kd.v);
+	glUniform3fv(glGetUniformLocation(shaderProgramID[SPHERE], "Ka"), 1, Ka.v);
+	glUniform1f(glGetUniformLocation(shaderProgramID[SPHERE], "specular_exponent"), specular_exponent);
+	glUniform3fv(glGetUniformLocation(shaderProgramID[SPHERE], "light"), 1, light.v);
+	glUniform4fv(glGetUniformLocation(shaderProgramID[SPHERE], "camPos"), 1, camera.Position.v);
+	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SPHERE], "view"), 1, GL_FALSE, view.m);
+	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SPHERE], "proj"), 1, GL_FALSE, projection.m);
+	
+
+	//glActiveTexture(GL_TEXTURE0);
+	//glBindTexture(GL_TEXTURE_2D, sphereTextureID);
+	//glUniform1i(glGetUniformLocation(shaderProgramID[SPHERE], "basic_texture"), 0);
+
+	/*glUseProgram(shaderProgramID[SPHERE]);
+	glBindVertexArray(sphereVAO);
 	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SPHERE], "view"), 1, GL_FALSE, view.m);
 	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SPHERE], "proj"), 1, GL_FALSE, projection.m);
 	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SPHERE], "model"), 1, GL_FALSE, model.m);
 
 	vec4 color = vec4(20.0f, 20.0f, 0.0f, 0.0f);
 
-	glUniform4fv(glGetUniformLocation(shaderProgramID[SPHERE], "ParticleColor"), 1, color.v);
+	glUniform4fv(glGetUniformLocation(shaderProgramID[SPHERE], "color"), 1, color.v);
 	
-	glBindTexture(GL_TEXTURE_2D, sphereTextureID);
 	glUniform1i(glGetUniformLocation(shaderProgramID[SPHERE], "TexCoords"), 0);
-
-	glBindVertexArray(sphereVAO);
-
-	glDrawArrays(GL_TRIANGLES, 0, sphere.vertex_count);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, sphereTextureID);*/
+	mat4 model = identity_mat4();
+	model = scale(model, vec3(0.01f, 0.01f, 0.01f));
+	
+	for (int i = 0; i < 10; i++)
+	{
+		model = translate(model, vec3(i * (0.02f), 0.0f, 0.0f));
+		glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SPHERE], "model"), 1, GL_FALSE, model.m);
+		glDrawArrays(GL_TRIANGLES, 0, sphere.vertex_count);
+	}
+	
 
 	glutSwapBuffers();
 }
 
 void processInput()
 {
-	if(keys[GLUT_KEY_UP])
+	if (keys[GLUT_KEY_UP])
+	{
+		cout << deltaTime << endl;
 		camera.ProcessKeyboard(FORWARD, deltaTime);
+	}
 	if(keys[GLUT_KEY_DOWN])
 		camera.ProcessKeyboard(BACKWARD, deltaTime);
 	if (keys[GLUT_KEY_LEFT])
@@ -148,11 +190,15 @@ void updateScene()
 void init()
 {
 	// Compile the shaders
-	CompileShaders(NUM_SHADERS, shaderProgramID, vertexShaderNames, fragmentShaderNames);
+	for (int i = 0; i < NUM_SHADERS; i++)
+	{
+		shaderProgramID[i] = CompileShaders(vertexShaderNames[i], fragmentShaderNames[i]);
+	}
+	//CompileShaders(NUM_SHADERS, shaderProgramID, vertexShaderNames, fragmentShaderNames);
 	skybox.setupSkybox(&skyboxVAO, &skyboxVBO, &cubemapTexture);
-	sphere = Mesh(shaderProgramID[SPHERE]);
+	sphere = Mesh(&shaderProgramID[SPHERE]);
 	sphere.generateObjectBufferMesh(sphereVAO, meshFiles[0]);
-	sphere.loadTexture(textureFiles[0], &sphereTextureID);
+	//sphere.loadTexture(textureFiles[0], &sphereTextureID);
 }
 
 /*
@@ -193,7 +239,7 @@ void processMouse(int x, int y)
 	lastX = x;
 	lastY = y;
 
-	camera.ProcessMouseMovement(xoffset, yoffset);
+	//camera.ProcessMouseMovement(xoffset, yoffset);
 }
 
 void mouseWheel(int button, int dir, int x, int y)
