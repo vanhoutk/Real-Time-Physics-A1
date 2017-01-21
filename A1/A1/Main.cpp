@@ -47,7 +47,9 @@ DWORD lastTime = 0;
 enum Shaders { SKYBOX, SPHERE };
 GLfloat cameraSpeed = 0.005f;
 GLfloat deltaTime = 1.0f / 60.0f;
+GLfloat friction = 0.1f;
 GLfloat lastX = 400, lastY = 300;
+GLfloat resilience = 0.1f;
 GLuint cubemapTexture;
 GLuint lastUsedParticle = 0;
 GLuint numParticles = 5000;
@@ -59,6 +61,7 @@ int screenWidth = 1000;
 int screenHeight = 800;
 Mesh skybox;
 Mesh sphere;
+vec3 gravity = vec3(0.0f, -9.81f, 0.0f);
 vector<Particle> particles;
 
 // | Resource Locations
@@ -131,6 +134,10 @@ void processForces()
 		Particle &particle = particles[i];
 		if (particle.life > 0.0f)
 		{
+			vec3 groundVector = vec3(0.0f, -1.0f, 0.0f);
+			vec3 groundNormal = vec3(0.0f, 1.0f, 0.0f);
+
+
 			// Clear Forces
 			particle.force = vec3(0.0f, 0.0f, 0.0f);
 
@@ -142,8 +149,7 @@ void processForces()
 			}*/
 
 			
-
-			vec3 normal = vec3(0.0f, 1.0f, 0.0f);
+			
 			// Apply the winds
 			vec3 upper_wind = vec3(0.01f, 0.0f, 0.0f);
 			//vec3 lower_wind = vec3(-0.05f, 0.0f, 0.0f);
@@ -169,7 +175,7 @@ void processForces()
 
 			// Apply Gravity Force
 			//particle.force += vec3(0.0f, -0.981f, 0.0f) * particle.mass;
-			particle.force += vec3(0.0f, -0.2f, 0.0f) * particle.mass;
+			particle.force += gravity * particle.mass;
 			// Ideally need to calculate air resitance
 
 			// Calculate the velocity
@@ -177,12 +183,17 @@ void processForces()
 
 			// Calculate the position
 			particle.position += particle.velocity * deltaTime;
+			
 
 			// Check for collision
-			if ((dot((particle.position - vec3(0.0f, -1.0f, 0.0f)), normal) < 0.0f) && (dot(normal, particle.velocity) < 0.0f))
+			if ((dot((particle.position - groundVector), groundNormal) < 0.0f) && (dot(groundNormal, particle.velocity) < 0.0f))
 			{
-				particle.position -= particle.velocity * deltaTime;
-				particle.position.v[1] = -1.0f;
+				vec3 velocityNormal = groundNormal * (dot(particle.velocity, groundNormal));
+				vec3 velocityTangent = particle.velocity - velocityNormal;
+				particle.velocity = (velocityTangent * (1 - friction)) - (velocityNormal * resilience);
+				particle.position -= groundNormal * (2 * (dot((particle.position - groundVector), groundNormal)));
+				//particle.position -= particle.velocity * deltaTime;
+				//particle.position.v[1] = -1.0f;
 				//particle.force.v[1] *= -0.8f;
 				//particle.velocity.v[1] *= -0.5f; // += (particle.force / particle.mass) * deltaTime;
 				//particle.position += particle.velocity * deltaTime;
