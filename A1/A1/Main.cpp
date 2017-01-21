@@ -51,7 +51,7 @@ GLfloat lastX = 400, lastY = 300;
 GLuint cubemapTexture;
 GLuint lastUsedParticle = 0;
 GLuint numParticles = 5000;
-GLuint numNewParticles = 10;
+GLuint numNewParticles = numParticles/(7*60);
 GLuint shaderProgramID[NUM_SHADERS];
 GLuint skyboxVAO, skyboxVBO;
 GLuint sphereTextureID, sphereVAO;
@@ -79,7 +79,7 @@ void display()
 	mat4 view = camera.GetViewMatrix(); // TODO: Figure out how to remove any translation component of the view matrix
 	mat4 projection = perspective(camera.Zoom, (float)screenWidth / (float)screenHeight, 0.1f, 100.0f);
 
-	glUseProgram(shaderProgramID[SKYBOX]);
+	/*glUseProgram(shaderProgramID[SKYBOX]);
 	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SKYBOX], "view"), 1, GL_FALSE, view.m);
 	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SKYBOX], "proj"), 1, GL_FALSE, projection.m);
 	
@@ -89,7 +89,7 @@ void display()
 	glBindVertexArray(skyboxVAO);
 	glDrawArrays(GL_TRIANGLES, 0, 36);
 	glDepthMask(GL_TRUE);
-	glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, 0);*/
 
 	glUseProgram(shaderProgramID[SPHERE]);
 	glBindVertexArray(sphereVAO);
@@ -134,15 +134,43 @@ void processForces()
 			// Clear Forces
 			particle.force = vec3(0.0f, 0.0f, 0.0f);
 
-			// Apply Initial Force
-			if ((particle.position.v[0] >= -0.05f && particle.position.v[0] <= 0.05f) &&
+			// Apply Initial Force from Fountain
+			/*if ((particle.position.v[0] >= -0.05f && particle.position.v[0] <= 0.05f) &&
 				(particle.position.v[2] >= -0.05f &&particle.position.v[2] <= 0.05f))
 			{
 				particle.force = vec3(particle.position.v[0] * 20.0f, 2.0f, particle.position.v[2] * 20.0f);
+			}*/
+
+			
+
+			vec3 normal = vec3(0.0f, 1.0f, 0.0f);
+			// Apply the winds
+			vec3 upper_wind = vec3(0.01f, 0.0f, 0.0f);
+			//vec3 lower_wind = vec3(-0.05f, 0.0f, 0.0f);
+			//vec3 circular_wind = cross(particle.position, normal) * 0.001;
+			//circular_wind.v[1] = 0.0f;
+			//particle.force += circular_wind;
+			if (particle.position.v[1] >= 1.2f && particle.position.v[1] <= 1.5f)
+			{
+				particle.force += upper_wind;
+			}
+			else if (particle.position.v[1] >= 0.6f)
+			{
+				particle.force += upper_wind * -2;
+			}
+			else if (particle.position.v[1] >= 0.0f)
+			{
+				particle.force += upper_wind * 1;
+			}
+			else if (particle.position.v[1] >= -0.6f)
+			{
+				particle.force += upper_wind * -1;
 			}
 
 			// Apply Gravity Force
-			particle.force += vec3(0.0f, -0.981f, 0.0f);
+			//particle.force += vec3(0.0f, -0.981f, 0.0f) * particle.mass;
+			particle.force += vec3(0.0f, -0.2f, 0.0f) * particle.mass;
+			// Ideally need to calculate air resitance
 
 			// Calculate the velocity
 			particle.velocity += (particle.force / particle.mass) * deltaTime;
@@ -151,13 +179,13 @@ void processForces()
 			particle.position += particle.velocity * deltaTime;
 
 			// Check for collision
-			vec3 normal = vec3(0.0f, 1.0f, 0.0f);
 			if ((dot((particle.position - vec3(0.0f, -1.0f, 0.0f)), normal) < 0.0f) && (dot(normal, particle.velocity) < 0.0f))
 			{
+				particle.position -= particle.velocity * deltaTime;
 				particle.position.v[1] = -1.0f;
 				//particle.force.v[1] *= -0.8f;
-				particle.velocity.v[1] *= -0.5f; // += (particle.force / particle.mass) * deltaTime;
-				particle.position += particle.velocity * deltaTime;
+				//particle.velocity.v[1] *= -0.5f; // += (particle.force / particle.mass) * deltaTime;
+				//particle.position += particle.velocity * deltaTime;
 			}
 		}
 	}
@@ -192,16 +220,21 @@ GLuint FirstUnusedParticle()
 
 void RespawnParticle(Particle &particle)
 {
-	GLfloat randomX = ((rand() % 100) - 50) / 1000.0f;
+	//GLfloat randomX = ((rand() % 100) - 50) / 1000.0f; // Fountain
+	GLfloat randomX = ((rand() % 100) - 50) / 75.0f; // Snow
 	//GLfloat randomY = ((rand() % 100) - 50) / 0.75f;
-	GLfloat randomY = 0.0f;
-	GLfloat randomZ = ((rand() % 100) - 50) / 1000.0f;
+	GLfloat randomY = 1.5f;
+	//GLfloat randomZ = ((rand() % 100) - 50) / 1000.0f; // Fountain
+	GLfloat randomZ = ((rand() % 100) - 50) / 75.0f; // Snow
 	GLfloat randomRed = 0.0 + ((rand() % 15) / 100.0f);
 	GLfloat randomGreen = 0.3 + ((rand() % 25) / 100.0f);
 	GLfloat randomBlue = 0.5 + ((rand() % 50) / 100.0f);
+	vec4 white = vec4(1.0f, 1.0f, 1.0f, 0.75f);
 	particle.position = vec3(randomX, randomY, randomZ);
-	particle.colour = vec4(randomRed, randomGreen, 1.0f, 1.0f);
-	particle.life = 5.0f;
+	//particle.colour = vec4(randomRed, randomGreen, 1.0f, 1.0f);
+	particle.colour = white;
+	particle.life = 7.0f;
+	particle.mass = 0.05f; // Snow
 	particle.velocity = vec3(0.0f, 0.0f, 0.0f);
 }
 
