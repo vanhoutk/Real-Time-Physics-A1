@@ -158,6 +158,7 @@
     <ClInclude Include="Antons_maths_funcs.h" />
     <ClInclude Include="Camera.h" />
     <ClInclude Include="Mesh.h" />
+    <ClInclude Include="Particle.h" />
     <ClInclude Include="Shader.h" />
     <ClInclude Include="Shader_Functions.h" />
     <ClInclude Include="stb_image.h" />

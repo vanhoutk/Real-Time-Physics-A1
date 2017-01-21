@@ -17,6 +17,7 @@
 #include "Antons_maths_funcs.h" // Anton's maths functions
 #include "Camera.h"
 #include "Mesh.h"
+#include "Particle.h"
 #include "Shader_Functions.h"
 #include "time.h"
 
@@ -31,14 +32,26 @@
 
 using namespace std;
 
+/*struct Particle {
+	vec3 position;
+	vec3 velocity;
+	GLfloat mass;
+	GLfloat life;
+	vec3 force;
+};*/
+
 bool firstMouse = true;
 bool keys[1024];
 Camera camera(vec3(0.0f, 0.0f, 3.0f));
 DWORD lastTime = 0;
 enum Shaders { SKYBOX, SPHERE };
-GLfloat deltaTime = 0.0f;
+GLfloat cameraSpeed = 0.005f;
+GLfloat deltaTime = 1.0f / 60.0f;
 GLfloat lastX = 400, lastY = 300;
 GLuint cubemapTexture;
+GLuint lastUsedParticle = 0;
+GLuint numParticles = 5000;
+GLuint numNewParticles = 10;
 GLuint shaderProgramID[NUM_SHADERS];
 GLuint skyboxVAO, skyboxVBO;
 GLuint sphereTextureID, sphereVAO;
@@ -46,28 +59,13 @@ int screenWidth = 1000;
 int screenHeight = 800;
 Mesh skybox;
 Mesh sphere;
+vector<Particle> particles;
 
 // | Resource Locations
 const char * meshFiles[NUM_MESHES] = { "../Meshes/sphere2.dae" };
 const char * textureFiles[NUM_TEXTURES] = { "../Textures/particle.png" };
-const char * vertexShaderNames[] = { "../Shaders/SkyboxVertexShader.txt", "../Shaders/noTextureVertexShader.txt"};
-const char * fragmentShaderNames[] = { "../Shaders/SkyboxFragmentShader.txt", "../Shaders/noTextureFragmentShader.txt" };
-
-
-/*struct mesh {
-	GLuint num_vertices;
-	vector<float> vertex_positions;
-	vector<float> normals;
-	vector<float> tex_coords;
-};*/
-
-struct Particle {
-	vec3 position;
-	vec3 velocity;
-	GLfloat mass;
-	GLfloat life;
-	vec3 force;
-};
+const char * vertexShaderNames[] = { "../Shaders/SkyboxVertexShader.txt", "../Shaders/ParticleVertexShader.txt"};
+const char * fragmentShaderNames[] = { "../Shaders/SkyboxFragmentShader.txt", "../Shaders/ParticleFragmentShader.txt" };
 
 void display() 
 {
@@ -81,108 +79,158 @@ void display()
 	mat4 view = camera.GetViewMatrix(); // TODO: Figure out how to remove any translation component of the view matrix
 	mat4 projection = perspective(camera.Zoom, (float)screenWidth / (float)screenHeight, 0.1f, 100.0f);
 
-	//glUseProgram(shaderProgramID[SKYBOX]);
-	//glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SKYBOX], "view"), 1, GL_FALSE, view.m);
-	//glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SKYBOX], "proj"), 1, GL_FALSE, projection.m);
+	glUseProgram(shaderProgramID[SKYBOX]);
+	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SKYBOX], "view"), 1, GL_FALSE, view.m);
+	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SKYBOX], "proj"), 1, GL_FALSE, projection.m);
 	
-	/*glDepthMask(GL_FALSE);
+	glDepthMask(GL_FALSE);
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
 	glBindVertexArray(skyboxVAO);
 	glDrawArrays(GL_TRIANGLES, 0, 36);
 	glDepthMask(GL_TRUE);
-	glBindTexture(GL_TEXTURE_CUBE_MAP, 0);*/
-
-	// light properties
-	vec3 Ls = vec3(0.0f, 0.0f, 0.0f);	//Specular Reflected Light
-	vec3 Ld = vec3(1.0f, 1.0f, 1.0f);	//Diffuse Surface Reflectance
-	vec3 La = vec3(1.0f, 1.0f, 1.0f);	//Ambient Reflected Light
-	vec3 light = vec3(5.0f, 5.0f, -5.0f);//light source location
-	vec3 coneDirection = light + vec3(0.0f, -1.0f, 0.0f);
-	float coneAngle = 40.0f;
-	// object colour
-	vec3 Ks = vec3(0.0f, 0.0f, 0.0f); // specular reflectance
-	vec3 Kd = vec3(247.0f / 255.0f, 194.0f / 255.0f, 87.0f / 255.0f);
-	vec3 Ka = vec3(247.0f / 255.0f, 194.0f / 255.0f, 87.0f / 255.0f); // ambient reflectance
-	float specular_exponent = 0.5f; //specular exponent - size of the specular elements
+	glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
 
 	glUseProgram(shaderProgramID[SPHERE]);
 	glBindVertexArray(sphereVAO);
-	glUniform3fv(glGetUniformLocation(shaderProgramID[SPHERE], "Ls"), 1, Ls.v);
-	glUniform3fv(glGetUniformLocation(shaderProgramID[SPHERE], "Ld"), 1, Ld.v);
-	glUniform3fv(glGetUniformLocation(shaderProgramID[SPHERE], "La"), 1, La.v);
-	glUniform3fv(glGetUniformLocation(shaderProgramID[SPHERE], "Ks"), 1, Ks.v);
-	glUniform3fv(glGetUniformLocation(shaderProgramID[SPHERE], "Kd"), 1, Kd.v);
-	glUniform3fv(glGetUniformLocation(shaderProgramID[SPHERE], "Ka"), 1, Ka.v);
-	glUniform1f(glGetUniformLocation(shaderProgramID[SPHERE], "specular_exponent"), specular_exponent);
-	glUniform3fv(glGetUniformLocation(shaderProgramID[SPHERE], "light"), 1, light.v);
-	glUniform4fv(glGetUniformLocation(shaderProgramID[SPHERE], "camPos"), 1, camera.Position.v);
 	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SPHERE], "view"), 1, GL_FALSE, view.m);
 	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SPHERE], "proj"), 1, GL_FALSE, projection.m);
 	
-
-	//glActiveTexture(GL_TEXTURE0);
-	//glBindTexture(GL_TEXTURE_2D, sphereTextureID);
-	//glUniform1i(glGetUniformLocation(shaderProgramID[SPHERE], "basic_texture"), 0);
-
-	/*glUseProgram(shaderProgramID[SPHERE]);
-	glBindVertexArray(sphereVAO);
-	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SPHERE], "view"), 1, GL_FALSE, view.m);
-	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SPHERE], "proj"), 1, GL_FALSE, projection.m);
-	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SPHERE], "model"), 1, GL_FALSE, model.m);
-
-	vec4 color = vec4(20.0f, 20.0f, 0.0f, 0.0f);
-
-	glUniform4fv(glGetUniformLocation(shaderProgramID[SPHERE], "color"), 1, color.v);
-	
-	glUniform1i(glGetUniformLocation(shaderProgramID[SPHERE], "TexCoords"), 0);
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, sphereTextureID);*/
-	mat4 model = identity_mat4();
-	model = scale(model, vec3(0.01f, 0.01f, 0.01f));
-	
-	for (int i = 0; i < 10; i++)
+	for (Particle particle : particles)
 	{
-		model = translate(model, vec3(i * (0.02f), 0.0f, 0.0f));
-		glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SPHERE], "model"), 1, GL_FALSE, model.m);
-		glDrawArrays(GL_TRIANGLES, 0, sphere.vertex_count);
+		if (particle.life > 0.0f)
+		{
+			mat4 model = identity_mat4();
+			model = scale(model, vec3(0.005f, 0.005f, 0.005f));
+			model = translate(model, particle.position);
+			glUniform4fv(glGetUniformLocation(shaderProgramID[SPHERE], "colour"), 1, particle.colour.v);
+			glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SPHERE], "model"), 1, GL_FALSE, model.m);
+			glDrawArrays(GL_TRIANGLES, 0, sphere.vertex_count);
+		}
 	}
 	
-
 	glutSwapBuffers();
 }
 
 void processInput()
 {
 	if (keys[GLUT_KEY_UP])
-	{
-		cout << deltaTime << endl;
-		camera.ProcessKeyboard(FORWARD, deltaTime);
-	}
+		camera.ProcessKeyboard(FORWARD, cameraSpeed);
 	if(keys[GLUT_KEY_DOWN])
-		camera.ProcessKeyboard(BACKWARD, deltaTime);
+		camera.ProcessKeyboard(BACKWARD, cameraSpeed);
 	if (keys[GLUT_KEY_LEFT])
-		camera.ProcessKeyboard(LEFT, deltaTime);
+		camera.ProcessKeyboard(LEFT, cameraSpeed);
 	if (keys[GLUT_KEY_RIGHT])
-		camera.ProcessKeyboard(RIGHT, deltaTime);
+		camera.ProcessKeyboard(RIGHT, cameraSpeed);
 }
 
 void processForces()
 {
-	// For all particles
-	// - Clear forces
-	// - Apply each force in turn
-	// - Solve for velocity and position
+	for (GLuint i = 0; i < numParticles; ++i)
+	{
+		Particle &particle = particles[i];
+		if (particle.life > 0.0f)
+		{
+			// Clear Forces
+			particle.force = vec3(0.0f, 0.0f, 0.0f);
+
+			// Apply Initial Force
+			if ((particle.position.v[0] >= -0.05f && particle.position.v[0] <= 0.05f) &&
+				(particle.position.v[2] >= -0.05f &&particle.position.v[2] <= 0.05f))
+			{
+				particle.force = vec3(particle.position.v[0] * 20.0f, 2.0f, particle.position.v[2] * 20.0f);
+			}
+
+			// Apply Gravity Force
+			particle.force += vec3(0.0f, -0.981f, 0.0f);
+
+			// Calculate the velocity
+			particle.velocity += (particle.force / particle.mass) * deltaTime;
+
+			// Calculate the position
+			particle.position += particle.velocity * deltaTime;
+
+			// Check for collision
+			vec3 normal = vec3(0.0f, 1.0f, 0.0f);
+			if ((dot((particle.position - vec3(0.0f, -1.0f, 0.0f)), normal) < 0.0f) && (dot(normal, particle.velocity) < 0.0f))
+			{
+				particle.position.v[1] = -1.0f;
+				//particle.force.v[1] *= -0.8f;
+				particle.velocity.v[1] *= -0.5f; // += (particle.force / particle.mass) * deltaTime;
+				particle.position += particle.velocity * deltaTime;
+			}
+		}
+	}
+
+}
+
+// https://learnopengl.com/#!In-Practice/2D-Game/Particles
+GLuint FirstUnusedParticle()
+{
+	// Search from last used particle, this will usually return almost instantly
+	for (GLuint i = lastUsedParticle; i < numParticles; i++) 
+	{
+		if (particles[i].life <= 0.0f) 
+		{
+			lastUsedParticle = i;
+			return i;
+		}
+	}
+	// Otherwise, do a linear search
+	for (GLuint i = 0; i < lastUsedParticle; i++) 
+	{
+		if (particles[i].life <= 0.0f) 
+		{
+			lastUsedParticle = i;
+			return i;
+		}
+	}
+	// Override first particle if all others are alive
+	lastUsedParticle = 0;
+	return 0;
+}
+
+void RespawnParticle(Particle &particle)
+{
+	GLfloat randomX = ((rand() % 100) - 50) / 1000.0f;
+	//GLfloat randomY = ((rand() % 100) - 50) / 0.75f;
+	GLfloat randomY = 0.0f;
+	GLfloat randomZ = ((rand() % 100) - 50) / 1000.0f;
+	GLfloat randomRed = 0.0 + ((rand() % 15) / 100.0f);
+	GLfloat randomGreen = 0.3 + ((rand() % 25) / 100.0f);
+	GLfloat randomBlue = 0.5 + ((rand() % 50) / 100.0f);
+	particle.position = vec3(randomX, randomY, randomZ);
+	particle.colour = vec4(randomRed, randomGreen, 1.0f, 1.0f);
+	particle.life = 5.0f;
+	particle.velocity = vec3(0.0f, 0.0f, 0.0f);
+}
+
+void updateParticles()
+{
+	// Add new particles
+	for (GLuint i = 0; i < numNewParticles; i++)
+	{
+		int unusedParticle = FirstUnusedParticle();
+		RespawnParticle(particles[unusedParticle]);
+	}
+	// Uupdate all particles
+	for (GLuint i = 0; i < numParticles; ++i)
+	{
+		Particle &p = particles[i];
+		p.life -= deltaTime; // reduce life
+		if (p.life > 0.0f)
+		{	// particle is alive, thus update
+			//p.position += p.velocity * deltaTime;
+			p.colour.v[3] -= deltaTime * 2.5;
+		}
+	}
 }
 
 void updateScene()
 {
-	DWORD  current_time = timeGetTime();
-	float  deltaTime = (current_time - lastTime) * 0.001f;
-	lastTime = current_time;
-
 	processInput();
 	processForces();
+	updateParticles();
 	// Draw the next frame
 	glutPostRedisplay();
 }
@@ -199,6 +247,9 @@ void init()
 	sphere = Mesh(&shaderProgramID[SPHERE]);
 	sphere.generateObjectBufferMesh(sphereVAO, meshFiles[0]);
 	//sphere.loadTexture(textureFiles[0], &sphereTextureID);
+
+	for (GLuint i = 0; i < numParticles; i++)
+		particles.push_back(Particle());
 }
 
 /*
@@ -239,7 +290,7 @@ void processMouse(int x, int y)
 	lastX = x;
 	lastY = y;
 
-	//camera.ProcessMouseMovement(xoffset, yoffset);
+	camera.ProcessMouseMovement(xoffset, yoffset);
 }
 
 void mouseWheel(int button, int dir, int x, int y)
