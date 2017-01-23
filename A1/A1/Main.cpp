@@ -42,13 +42,13 @@ using namespace std;
 
 bool firstMouse = true;
 bool keys[1024];
-Camera camera(vec3(0.0f, 0.0f, 3.0f));
+Camera camera(vec3(0.0f, -0.5f, 3.0f));
 DWORD lastTime = 0;
 enum Meshes { PARTICLE_MESH, PLANE_MESH };
 enum Shaders { SKYBOX, PARTICLE_SHADER, BASIC_TEXTURE_SHADER };
 GLfloat cameraSpeed = 0.005f;
 GLfloat deltaTime = 1.0f / 60.0f;
-GLfloat friction = 0.3f;
+GLfloat friction = 0.98f;
 GLfloat lastX = 400, lastY = 300;
 GLfloat resilience = 0.01f;
 GLfloat snowGravityFactor = 0.1f;
@@ -80,16 +80,16 @@ void display()
 	// Tell GL to only draw onto a pixel if the shape is closer to the viewer
 	glEnable(GL_DEPTH_TEST);	// Enable depth-testing
 	glDepthFunc(GL_LESS);		// Depth-testing interprets a smaller value as "closer"
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClearColor(5.0f/255.0f, 1.0f/255.0f, 15.0f/255.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	// Draw skybox first
 	mat4 view = camera.GetViewMatrix(); 
 	mat4 projection = perspective(camera.Zoom, (float)screenWidth / (float)screenHeight, 0.1f, 100.0f);
 
-	/*glUseProgram(shaderProgramID[SKYBOX]);
+	glUseProgram(shaderProgramID[SKYBOX]);
 	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SKYBOX], "view"), 1, GL_FALSE, view.m);
-	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SKYBOX], "proj"), 1, GL_FALSE, projection.m);
+	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SKYBOX], "projection"), 1, GL_FALSE, projection.m);
 	
 	glDepthMask(GL_FALSE);
 	glActiveTexture(GL_TEXTURE0);
@@ -97,7 +97,7 @@ void display()
 	glBindVertexArray(skyboxVAO);
 	glDrawArrays(GL_TRIANGLES, 0, 36);
 	glDepthMask(GL_TRUE);
-	glBindTexture(GL_TEXTURE_CUBE_MAP, 0);*/
+	glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
 
 
 
@@ -161,6 +161,8 @@ void processInput()
 		camera.ProcessKeyboard(LEFT, cameraSpeed);
 	if (keys[GLUT_KEY_RIGHT])
 		camera.ProcessKeyboard(RIGHT, cameraSpeed);
+	if (keys[(char)27])
+		exit(0);
 }
 
 void processForces()
@@ -187,27 +189,32 @@ void processForces()
 			
 			
 			// Apply the winds
-			vec3 upper_wind = vec3(0.015f, 0.0f, 0.0f);
+			vec3 wind = vec3(0.015f, 0.0f, 0.0f);
 			//vec3 lower_wind = vec3(-0.05f, 0.0f, 0.0f);
 			//vec3 circular_wind = cross(particle.position, normal) * 0.001;
 			//circular_wind.v[1] = 0.0f;
 			//particle.force += circular_wind;
 			if (particle.position.v[1] >= 1.2f && particle.position.v[1] <= 1.5f)
 			{
-				particle.force += upper_wind;
+				particle.force += wind;
 			}
 			else if (particle.position.v[1] >= 0.6f)
 			{
-				particle.force += upper_wind * -2;
+				particle.force += wind * -2;
 			}
 			else if (particle.position.v[1] >= 0.0f)
 			{
-				particle.force += upper_wind * 1;
+				particle.force += wind * 1;
+				vec3 gust = vec3(0.0f, -0.5f, 1.5f);
+				if (keys['w'])
+					particle.force += gust;
 			}
 			else if (particle.position.v[1] >= -0.6f)
 			{
-				particle.force += upper_wind * -1;
+				particle.force += wind * -1;
 			}
+
+			
 
 			// Apply Gravity Force
 			//particle.force += vec3(0.0f, -0.981f, 0.0f) * particle.mass;
@@ -268,7 +275,7 @@ GLuint FirstUnusedParticle()
 void RespawnParticle(Particle &particle)
 {
 	//GLfloat randomX = ((rand() % 100) - 50) / 1000.0f; // Fountain
-	GLfloat randomX = ((rand() % 1000) - 500) / 500.0f; // Snow
+	GLfloat randomX = ((rand() % 1000) - 500) / 250.0f; // Snow
 	//GLfloat randomY = ((rand() % 100) - 50) / 0.75f;
 	GLfloat randomY = 1.5f;
 	//GLfloat randomZ = ((rand() % 100) - 50) / 1000.0f; // Fountain
@@ -323,7 +330,7 @@ void init()
 		shaderProgramID[i] = CompileShaders(vertexShaderNames[i], fragmentShaderNames[i]);
 	}
 	//CompileShaders(NUM_SHADERS, shaderProgramID, vertexShaderNames, fragmentShaderNames);
-	//skyboxMesh.setupSkybox(&skyboxVAO, &skyboxVBO, &cubemapTexture);
+	skyboxMesh.setupSkybox(&skyboxVAO, &skyboxVBO, &cubemapTexture);
 	groundMesh = Mesh(&shaderProgramID[BASIC_TEXTURE_SHADER]);
 	groundMesh.generateObjectBufferMesh(groundVAO, meshFiles[PLANE_MESH]);
 	groundMesh.loadTexture(textureFiles[1], &groundTextureID);
@@ -342,10 +349,14 @@ void init()
  */
 #pragma region USER_INPUT_FUNCTIONS
 void pressNormalKeys(unsigned char key, int x, int y)
-{}
+{
+	keys[key] = true;
+}
 
 void releaseNormalKeys(unsigned char key, int x, int y)
-{}
+{
+	keys[key] = false;
+}
 
 void pressSpecialKeys(int key, int x, int y)
 {

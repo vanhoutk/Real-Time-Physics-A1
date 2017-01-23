@@ -231,12 +231,12 @@ void Mesh::setupSkybox(GLuint* skyboxVAO, GLuint* skyboxVBO, GLuint* cubemapText
 	glBindVertexArray(0);
 
 	vector<const GLchar*> faces;
-	faces.push_back("../Textures/posx.jpg");
-	faces.push_back("../Textures/negx.jpg");
-	faces.push_back("../Textures/posy.jpg");
-	faces.push_back("../Textures/negy.jpg");
-	faces.push_back("../Textures/posz.jpg");
-	faces.push_back("../Textures/negz.jpg");
+	faces.push_back("../Textures/DSposx.png");
+	faces.push_back("../Textures/DSnegx.png");
+	faces.push_back("../Textures/DSposy.png");
+	faces.push_back("../Textures/DSnegy.png");
+	faces.push_back("../Textures/DSposz.png");
+	faces.push_back("../Textures/DSnegz.png");
 	*cubemapTexture = loadCubemap(faces);
 }
 
