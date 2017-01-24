@@ -70,7 +70,7 @@ vec3 gravity = vec3(0.0f, -9.81f, 0.0f);
 vector<Particle> particles;
 
 // | Resource Locations
-const char * meshFiles[NUM_MESHES] = { "../Meshes/particle.dae", "../Meshes/plane.dae" };
+const char * meshFiles[NUM_MESHES] = { "../Meshes/particle_reduced.dae", "../Meshes/plane.dae" };
 const char * textureFiles[NUM_TEXTURES] = { "../Textures/particle.png", "../Textures/asphalt.jpg", "../Textures/building.jpg" };
 const char * vertexShaderNames[NUM_SHADERS] = { "../Shaders/SkyboxVertexShader.txt", "../Shaders/ParticleVertexShader.txt", "../Shaders/BasicTextureVertexShader.txt" };
 const char * fragmentShaderNames[NUM_SHADERS] = { "../Shaders/SkyboxFragmentShader.txt", "../Shaders/ParticleFragmentShader.txt", "../Shaders/BasicTextureFragmentShader.txt" };
