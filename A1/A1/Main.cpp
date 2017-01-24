@@ -52,13 +52,11 @@ GLfloat friction = 0.98f;
 GLfloat lastX = 400, lastY = 300;
 GLfloat resilience = 0.01f;
 GLfloat snowGravityFactor = 0.1f;
-GLuint cubemapTexture;
 GLuint groundVAO, groundTextureID;
 GLuint lastUsedParticle = 0;
 GLuint numParticles = 30000;
 GLuint numNewParticles = numParticles/(5*60);
 GLuint shaderProgramID[NUM_SHADERS];
-GLuint skyboxVAO, skyboxVBO;
 GLuint particleTextureID, particleVAO;
 GLuint wallTextureID;
 int screenWidth = 1000;
@@ -71,7 +69,9 @@ vector<Particle> particles;
 
 // | Resource Locations
 const char * meshFiles[NUM_MESHES] = { "../Meshes/particle_reduced.dae", "../Meshes/plane.dae" };
+const char * skyboxTextureFiles[6] = { "../Textures/DSposx.png", "../Textures/DSnegx.png", "../Textures/DSposy.png", "../Textures/DSnegy.png", "../Textures/DSposz.png", "../Textures/DSnegz.png"};
 const char * textureFiles[NUM_TEXTURES] = { "../Textures/particle.png", "../Textures/asphalt.jpg", "../Textures/building.jpg" };
+
 const char * vertexShaderNames[NUM_SHADERS] = { "../Shaders/SkyboxVertexShader.txt", "../Shaders/ParticleVertexShader.txt", "../Shaders/BasicTextureVertexShader.txt" };
 const char * fragmentShaderNames[NUM_SHADERS] = { "../Shaders/SkyboxFragmentShader.txt", "../Shaders/ParticleFragmentShader.txt", "../Shaders/BasicTextureFragmentShader.txt" };
 
@@ -87,17 +87,7 @@ void display()
 	mat4 view = camera.GetViewMatrix(); 
 	mat4 projection = perspective(camera.Zoom, (float)screenWidth / (float)screenHeight, 0.1f, 100.0f);
 
-	glUseProgram(shaderProgramID[SKYBOX]);
-	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SKYBOX], "view"), 1, GL_FALSE, view.m);
-	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[SKYBOX], "projection"), 1, GL_FALSE, projection.m);
-	
-	glDepthMask(GL_FALSE);
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
-	glBindVertexArray(skyboxVAO);
-	glDrawArrays(GL_TRIANGLES, 0, 36);
-	glDepthMask(GL_TRUE);
-	glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+	skyboxMesh.drawSkybox(view, projection);
 
 
 
@@ -235,11 +225,6 @@ void processForces()
 				vec3 velocityTangent = particle.velocity - velocityNormal;
 				particle.velocity = (velocityTangent * (1 - friction)) - (velocityNormal * resilience);
 				particle.position -= groundNormal * (2 * (dot((particle.position - groundVector), groundNormal)));
-				//particle.position -= particle.velocity * deltaTime;
-				//particle.position.v[1] = -1.0f;
-				//particle.force.v[1] *= -0.8f;
-				//particle.velocity.v[1] *= -0.5f; // += (particle.force / particle.mass) * deltaTime;
-				//particle.position += particle.velocity * deltaTime;
 			}
 		}
 	}
@@ -329,8 +314,9 @@ void init()
 	{
 		shaderProgramID[i] = CompileShaders(vertexShaderNames[i], fragmentShaderNames[i]);
 	}
-	//CompileShaders(NUM_SHADERS, shaderProgramID, vertexShaderNames, fragmentShaderNames);
-	skyboxMesh.setupSkybox(&skyboxVAO, &skyboxVBO, &cubemapTexture);
+
+	skyboxMesh = Mesh(&shaderProgramID[SKYBOX]);
+	skyboxMesh.setupSkybox(skyboxTextureFiles);
 	groundMesh = Mesh(&shaderProgramID[BASIC_TEXTURE_SHADER]);
 	groundMesh.generateObjectBufferMesh(groundVAO, meshFiles[PLANE_MESH]);
 	groundMesh.loadTexture(textureFiles[1], &groundTextureID);

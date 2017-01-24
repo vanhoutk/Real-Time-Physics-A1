@@ -32,14 +32,19 @@ public:
 	bool loadMesh(const char* file_name);
 	void generateObjectBufferMesh(GLuint &vao, const char* file_name);
 	bool loadTexture(const char* file_name, GLuint* texture_id);
-	void setupSkybox(GLuint* skyboxVAO, GLuint* skyboxVBO, GLuint* cubemapTexture);
+	// Skybox functions
+	void setupSkybox(const char ** skyboxTextureFiles);
 	GLuint loadCubemap(vector<const GLchar*> faces);
+	void drawSkybox(mat4 viewMatrix, mat4 projectionMatrix);
 private:
 	GLuint* shaderProgramID;
+	GLuint meshVAO;
+	GLuint meshVBO;
+	GLuint cubemapTexture;
 	
-	vector<float> vertex_positions;
 	vector<float> normals;
 	vector<float> texture_coords;
+	vector<float> vertex_positions;
 };
 
 Mesh::Mesh()
@@ -173,7 +178,7 @@ bool Mesh::loadTexture(const char* file_name, GLuint* texture_id)
 	return true;
 }
 
-void Mesh::setupSkybox(GLuint* skyboxVAO, GLuint* skyboxVBO, GLuint* cubemapTexture)
+void Mesh::setupSkybox(const char ** skyboxTextureFiles)
 {
 	GLfloat skyboxVertices[] =
 	{
@@ -221,23 +226,25 @@ void Mesh::setupSkybox(GLuint* skyboxVAO, GLuint* skyboxVBO, GLuint* cubemapText
 		10.0f, -10.0f,  10.0f
 	};
 
-	glGenVertexArrays(1, skyboxVAO);
-	glGenBuffers(1, skyboxVBO);
-	glBindVertexArray(*skyboxVAO);
-	glBindBuffer(GL_ARRAY_BUFFER, *skyboxVBO);
+	glGenVertexArrays(1, &meshVAO);
+	glGenBuffers(1, &meshVBO);
+	glBindVertexArray(meshVAO);
+	glBindBuffer(GL_ARRAY_BUFFER, meshVBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
 	glBindVertexArray(0);
 
 	vector<const GLchar*> faces;
-	faces.push_back("../Textures/DSposx.png");
+	/*faces.push_back("../Textures/DSposx.png");
 	faces.push_back("../Textures/DSnegx.png");
 	faces.push_back("../Textures/DSposy.png");
 	faces.push_back("../Textures/DSnegy.png");
 	faces.push_back("../Textures/DSposz.png");
-	faces.push_back("../Textures/DSnegz.png");
-	*cubemapTexture = loadCubemap(faces);
+	faces.push_back("../Textures/DSnegz.png");*/
+	for (int i = 0; i < 6; i++)
+		faces.push_back(skyboxTextureFiles[i]);
+	cubemapTexture = loadCubemap(faces);
 }
 
 // Loads a cubemap texture from 6 individual texture faces
@@ -277,4 +284,19 @@ GLuint Mesh::loadCubemap(vector<const GLchar*> faces)
 	glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
 
 	return textureID;
+}
+
+void Mesh::drawSkybox(mat4 viewMatrix, mat4 projectionMatrix)
+{
+	glUseProgram(*shaderProgramID);
+	glUniformMatrix4fv(glGetUniformLocation(*shaderProgramID, "view"), 1, GL_FALSE, viewMatrix.m);
+	glUniformMatrix4fv(glGetUniformLocation(*shaderProgramID, "projection"), 1, GL_FALSE, projectionMatrix.m);
+
+	glDepthMask(GL_FALSE);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+	glBindVertexArray(meshVAO);
+	glDrawArrays(GL_TRIANGLES, 0, 36);
+	glDepthMask(GL_TRUE);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
 }
