@@ -1,7 +1,6 @@
 /*
  *	Includes
  */
-
 #include <assimp/cimport.h>		// C importer
 #include <assimp/scene.h>		// Collects data
 #include <assimp/postprocess.h> // Various extra operations
@@ -21,6 +20,8 @@
 #include "Shader_Functions.h"
 #include "time.h"
 
+using namespace std;
+
 /*
  *	Globally defined variables and constants
  */
@@ -30,22 +31,12 @@
 #define NUM_SHADERS	 3
 #define NUM_TEXTURES 3
 
-using namespace std;
-
-/*struct Particle {
-	vec3 position;
-	vec3 velocity;
-	GLfloat mass;
-	GLfloat life;
-	vec3 force;
-};*/
-
 bool firstMouse = true;
 bool keys[1024];
 Camera camera(vec3(0.0f, -0.5f, 3.0f));
-DWORD lastTime = 0;
 enum Meshes { PARTICLE_MESH, PLANE_MESH };
 enum Shaders { SKYBOX, PARTICLE_SHADER, BASIC_TEXTURE_SHADER };
+enum Textures { PARTICLE_TEXTURE, GROUND_TEXTURE, WALL_TEXTURE };
 GLfloat cameraSpeed = 0.005f;
 GLfloat deltaTime = 1.0f / 60.0f;
 GLfloat friction = 0.98f;
@@ -61,10 +52,10 @@ GLuint particleTextureID, particleVAO;
 GLuint wallTextureID;
 int screenWidth = 1000;
 int screenHeight = 800;
-Mesh groundMesh;
-Mesh skyboxMesh;
-Mesh particleMesh;
+Mesh skyboxMesh, particleMesh, groundMesh, wallMesh;
 vec3 gravity = vec3(0.0f, -9.81f, 0.0f);
+vec3 groundVector = vec3(0.0f, -1.0f, 0.0f);
+vec3 groundNormal = vec3(0.0f, 1.0f, 0.0f);
 vector<Particle> particles;
 
 // | Resource Locations
@@ -89,52 +80,31 @@ void display()
 
 	skyboxMesh.drawSkybox(view, projection);
 
-
-
 	mat4 groundModel = identity_mat4();
 	groundModel = scale(groundModel, vec3(2.0f, 1.0f, 20.0f));
 	groundModel = translate(groundModel, vec3(0.0f, -1.0f, -5.0f));
 	vec4 groundColour = vec4(0.5f, 1.0f, 1.0f, 1.0f);
 
-
-	glBindVertexArray(groundVAO);
-	glUseProgram(shaderProgramID[BASIC_TEXTURE_SHADER]);
-	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[BASIC_TEXTURE_SHADER], "view"), 1, GL_FALSE, view.m);
-	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[BASIC_TEXTURE_SHADER], "projection"), 1, GL_FALSE, projection.m);
-
-	glBindTexture(GL_TEXTURE_2D, groundTextureID);
-	glUniform1i(glGetUniformLocation(shaderProgramID[BASIC_TEXTURE_SHADER], "basic_texture"), 0);
-	//glUniform4fv(glGetUniformLocation(shaderProgramID[BASIC_TEXTURE_SHADER], "colour"), 1, groundColour.v);
-	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[BASIC_TEXTURE_SHADER], "model"), 1, GL_FALSE, groundModel.m);
-	glDrawArrays(GL_TRIANGLES, 0, groundMesh.vertex_count);
+	groundMesh.drawMesh(view, projection, groundModel);
 
 	mat4 wallModel = identity_mat4();
 	wallModel = scale(wallModel, vec3(2.0f, 1.0f, 20.0f));
 	wallModel = rotate_z_deg(wallModel, 90.0f);
 	mat4 leftWallModel = translate(wallModel, vec3(-1.0f, 0.0f, -5.0f));
 	mat4 rightWallModel = translate(wallModel, vec3(1.0f, 0.0f, -5.0f));
-	glBindTexture(GL_TEXTURE_2D, wallTextureID);
-	glUniform1i(glGetUniformLocation(shaderProgramID[BASIC_TEXTURE_SHADER], "basic_texture"), 0);
-	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[BASIC_TEXTURE_SHADER], "model"), 1, GL_FALSE, leftWallModel.m);
-	glDrawArrays(GL_TRIANGLES, 0, groundMesh.vertex_count);
-	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[BASIC_TEXTURE_SHADER], "model"), 1, GL_FALSE, rightWallModel.m);
-	glDrawArrays(GL_TRIANGLES, 0, groundMesh.vertex_count);
-	
-	glUseProgram(shaderProgramID[PARTICLE_SHADER]);
-	glBindVertexArray(particleVAO);
-	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[PARTICLE_SHADER], "view"), 1, GL_FALSE, view.m);
-	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[PARTICLE_SHADER], "projection"), 1, GL_FALSE, projection.m);
+
+	wallMesh.drawMesh(view, projection, leftWallModel);
+	wallMesh.drawMesh(view, projection, rightWallModel);
 	
 	for (Particle particle : particles)
 	{
 		if (particle.life > 0.0f)
 		{
-			mat4 model = identity_mat4();
-			model = scale(model, vec3(0.005f, 0.005f, 0.005f));
-			model = translate(model, particle.position);
-			glUniform4fv(glGetUniformLocation(shaderProgramID[PARTICLE_SHADER], "colour"), 1, particle.colour.v);
-			glUniformMatrix4fv(glGetUniformLocation(shaderProgramID[PARTICLE_SHADER], "model"), 1, GL_FALSE, model.m);
-			glDrawArrays(GL_TRIANGLES, 0, particleMesh.vertex_count);
+			mat4 particleModel = identity_mat4();
+			particleModel = scale(particleModel, vec3(0.005f, 0.005f, 0.005f));
+			particleModel = translate(particleModel, particle.position);
+
+			particleMesh.drawMesh(view, projection, particleModel, particle.colour);
 		}
 	}
 	
@@ -162,8 +132,7 @@ void processForces()
 		Particle &particle = particles[i];
 		if (particle.life > 0.0f)
 		{
-			vec3 groundVector = vec3(0.0f, -1.0f, 0.0f);
-			vec3 groundNormal = vec3(0.0f, 1.0f, 0.0f);
+			
 
 
 			// Clear Forces
@@ -317,14 +286,17 @@ void init()
 
 	skyboxMesh = Mesh(&shaderProgramID[SKYBOX]);
 	skyboxMesh.setupSkybox(skyboxTextureFiles);
+
 	groundMesh = Mesh(&shaderProgramID[BASIC_TEXTURE_SHADER]);
-	groundMesh.generateObjectBufferMesh(groundVAO, meshFiles[PLANE_MESH]);
-	groundMesh.loadTexture(textureFiles[1], &groundTextureID);
-	groundMesh.loadTexture(textureFiles[2], &wallTextureID);
+	groundMesh.generateObjectBufferMesh(meshFiles[PLANE_MESH]);
+	groundMesh.loadTexture(textureFiles[1]);
+
+	wallMesh = Mesh(&shaderProgramID[BASIC_TEXTURE_SHADER]);
+	wallMesh.generateObjectBufferMesh(meshFiles[PLANE_MESH]);
+	wallMesh.loadTexture(textureFiles[2]);
 
 	particleMesh = Mesh(&shaderProgramID[PARTICLE_SHADER]);
-	particleMesh.generateObjectBufferMesh(particleVAO, meshFiles[PARTICLE_MESH]);
-	//particleMesh.loadTexture(textureFiles[0], &particleTextureID);
+	particleMesh.generateObjectBufferMesh(meshFiles[PARTICLE_MESH]);
 
 	for (GLuint i = 0; i < numParticles; i++)
 		particles.push_back(Particle());

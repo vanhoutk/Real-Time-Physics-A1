@@ -29,18 +29,24 @@ public:
 
 	Mesh();
 	Mesh(GLuint* shaderID);
-	bool loadMesh(const char* file_name);
-	void generateObjectBufferMesh(GLuint &vao, const char* file_name);
-	bool loadTexture(const char* file_name, GLuint* texture_id);
+	
+	// Mesh Functions
+	bool loadMesh(const char* fileName);
+	void generateObjectBufferMesh(const char* fileName);
+	bool loadTexture(const char* fileName);
+	void drawMesh(mat4 view, mat4 projection, mat4 model, vec4 colour);
+	
 	// Skybox functions
 	void setupSkybox(const char ** skyboxTextureFiles);
 	GLuint loadCubemap(vector<const GLchar*> faces);
 	void drawSkybox(mat4 viewMatrix, mat4 projectionMatrix);
 private:
-	GLuint* shaderProgramID;
+	bool hasTexture;
+
+	GLuint shaderProgramID;
 	GLuint meshVAO;
 	GLuint meshVBO;
-	GLuint cubemapTexture;
+	GLuint textureID;
 	
 	vector<float> normals;
 	vector<float> texture_coords;
@@ -48,19 +54,22 @@ private:
 };
 
 Mesh::Mesh()
-{}
+{
+	hasTexture = false;
+}
 
 Mesh::Mesh(GLuint* shaderID)
 {
-	shaderProgramID = shaderID;
+	hasTexture = false;
+	shaderProgramID = *shaderID;
 }
 
-bool Mesh::loadMesh(const char* file_name)
+bool Mesh::loadMesh(const char* fileName)
 {
-	const aiScene* scene = aiImportFile(file_name, aiProcess_Triangulate | aiProcess_CalcTangentSpace); // TRIANGLES!
-	//fprintf(stderr, "ERROR: reading mesh %s\n", file_name);
+	const aiScene* scene = aiImportFile(fileName, aiProcess_Triangulate | aiProcess_CalcTangentSpace); // TRIANGLES!
+	//fprintf(stderr, "ERROR: reading mesh %s\n", fileName);
 	if (!scene) {
-		fprintf(stderr, "ERROR: reading mesh %s\n", file_name);
+		fprintf(stderr, "ERROR: reading mesh %s\n", fileName);
 		return false;
 	}
 	printf("  %i animations\n", scene->mNumAnimations);
@@ -112,13 +121,13 @@ bool Mesh::loadMesh(const char* file_name)
 	return true;
 }
 
-void Mesh::generateObjectBufferMesh(GLuint &vao, const char* file_name) 
+void Mesh::generateObjectBufferMesh(const char* fileName) 
 {
 	// Load mesh and copy into buffers
-	loadMesh(file_name);
-	GLuint loc1 = glGetAttribLocation(*shaderProgramID, "vertex_position");
-	GLuint loc2 = glGetAttribLocation(*shaderProgramID, "vertex_normal");
-	GLuint loc3 = glGetAttribLocation(*shaderProgramID, "vertex_texture");
+	loadMesh(fileName);
+	GLuint loc1 = glGetAttribLocation(shaderProgramID, "vertex_position");
+	GLuint loc2 = glGetAttribLocation(shaderProgramID, "vertex_normal");
+	GLuint loc3 = glGetAttribLocation(shaderProgramID, "vertex_texture");
 
 	unsigned int position_vbo = 0;
 	glGenBuffers(1, &position_vbo);
@@ -133,8 +142,8 @@ void Mesh::generateObjectBufferMesh(GLuint &vao, const char* file_name)
 	glBindBuffer(GL_ARRAY_BUFFER, texture_vbo);
 	glBufferData(GL_ARRAY_BUFFER, vertex_count * 2 * sizeof(float), &texture_coords[0], GL_STATIC_DRAW);
 
-	glGenVertexArrays(1, &vao);
-	glBindVertexArray(vao);
+	glGenVertexArrays(1, &meshVAO);
+	glBindVertexArray(meshVAO);
 
 	glEnableVertexAttribArray(loc1);
 	glBindBuffer(GL_ARRAY_BUFFER, position_vbo);
@@ -148,22 +157,22 @@ void Mesh::generateObjectBufferMesh(GLuint &vao, const char* file_name)
 	glBindVertexArray(0);
 }
 
-bool Mesh::loadTexture(const char* file_name, GLuint* texture_id)
+bool Mesh::loadTexture(const char* fileName)
 {
 	int width, height, n;
-	unsigned char* image = stbi_load(file_name, &width, &height, &n, STBI_rgb_alpha);
+	unsigned char* image = stbi_load(fileName, &width, &height, &n, STBI_rgb_alpha);
 	if (!image) {
-		fprintf(stderr, "ERROR: could not load %s\n", file_name);
+		fprintf(stderr, "ERROR: could not load %s\n", fileName);
 		return false;
 	}
 	// NPOT check
 	if ((width & (width - 1)) != 0 || (height & (height - 1)) != 0) {
-		fprintf(stderr, "WARNING: texture %s is not power-of-2 dimensions\n", file_name);
+		fprintf(stderr, "WARNING: texture %s is not power-of-2 dimensions\n", fileName);
 	}
 
-	glGenTextures(1, texture_id);
+	glGenTextures(1, &textureID);
 	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, *texture_id);
+	glBindTexture(GL_TEXTURE_2D, textureID);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, image);
 	glGenerateMipmap(GL_TEXTURE_2D);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
@@ -175,7 +184,30 @@ bool Mesh::loadTexture(const char* file_name, GLuint* texture_id)
 	// set the maximum!
 	glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, max_aniso);
 	glBindTexture(GL_TEXTURE_2D, 0);
+
+	hasTexture = true;
+
 	return true;
+}
+
+void Mesh::drawMesh(mat4 view, mat4 projection, mat4 model, vec4 colour = vec4(0.0f, 0.0f, 0.0f, 0.0f))
+{
+	glUseProgram(shaderProgramID);
+	glBindVertexArray(meshVAO);
+	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID, "view"), 1, GL_FALSE, view.m);
+	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID, "projection"), 1, GL_FALSE, projection.m);
+	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID, "model"), 1, GL_FALSE, model.m);
+
+	if (hasTexture)
+	{
+		glBindTexture(GL_TEXTURE_2D, textureID);
+		glUniform1i(glGetUniformLocation(shaderProgramID, "basic_texture"), 0);
+	}
+
+	glUniform4fv(glGetUniformLocation(shaderProgramID, "colour"), 1, colour.v);
+
+	glDrawArrays(GL_TRIANGLES, 0, vertex_count);
+
 }
 
 void Mesh::setupSkybox(const char ** skyboxTextureFiles)
@@ -236,15 +268,9 @@ void Mesh::setupSkybox(const char ** skyboxTextureFiles)
 	glBindVertexArray(0);
 
 	vector<const GLchar*> faces;
-	/*faces.push_back("../Textures/DSposx.png");
-	faces.push_back("../Textures/DSnegx.png");
-	faces.push_back("../Textures/DSposy.png");
-	faces.push_back("../Textures/DSnegy.png");
-	faces.push_back("../Textures/DSposz.png");
-	faces.push_back("../Textures/DSnegz.png");*/
 	for (int i = 0; i < 6; i++)
 		faces.push_back(skyboxTextureFiles[i]);
-	cubemapTexture = loadCubemap(faces);
+	textureID = loadCubemap(faces);
 }
 
 // Loads a cubemap texture from 6 individual texture faces
@@ -288,13 +314,13 @@ GLuint Mesh::loadCubemap(vector<const GLchar*> faces)
 
 void Mesh::drawSkybox(mat4 viewMatrix, mat4 projectionMatrix)
 {
-	glUseProgram(*shaderProgramID);
-	glUniformMatrix4fv(glGetUniformLocation(*shaderProgramID, "view"), 1, GL_FALSE, viewMatrix.m);
-	glUniformMatrix4fv(glGetUniformLocation(*shaderProgramID, "projection"), 1, GL_FALSE, projectionMatrix.m);
+	glUseProgram(shaderProgramID);
+	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID, "view"), 1, GL_FALSE, viewMatrix.m);
+	glUniformMatrix4fv(glGetUniformLocation(shaderProgramID, "projection"), 1, GL_FALSE, projectionMatrix.m);
 
 	glDepthMask(GL_FALSE);
 	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
 	glBindVertexArray(meshVAO);
 	glDrawArrays(GL_TRIANGLES, 0, 36);
 	glDepthMask(GL_TRUE);
