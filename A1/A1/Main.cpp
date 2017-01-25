@@ -85,7 +85,8 @@ void display()
 	groundMesh.drawMesh(view, projection, groundModel);
 
 	mat4 wallModel = identity_mat4();
-	wallModel = scale(wallModel, vec3(2.0f, 1.0f, 20.0f));
+	wallModel = scale(wallModel, vec3(20.0f, 1.0f, 2.0f));
+	wallModel = rotate_y_deg(wallModel, 90.0f);
 	wallModel = rotate_z_deg(wallModel, 90.0f);
 	mat4 leftWallModel = translate(wallModel, vec3(-1.0f, 0.0f, -5.0f));
 	mat4 rightWallModel = translate(wallModel, vec3(1.0f, 0.0f, -5.0f));
