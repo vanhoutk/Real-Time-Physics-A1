@@ -109,6 +109,135 @@ void display()
 	glutSwapBuffers();
 }
 
+void updateForces(Particle &p)
+{
+	// Clear Forces
+	p.force = vec3(0.0f, 0.0f, 0.0f);
+
+	// Apply varying forces due to wind at different positions
+	vec3 gust = vec3(0.0f, -0.5f, 1.5f);
+	vec3 wind = vec3(0.015f, 0.0f, 0.0f);
+
+	if (p.position.v[1] >= 1.2f && p.position.v[1] <= 1.5f)
+	{
+		p.force += wind;
+	}
+	else if (p.position.v[1] >= 0.6f)
+	{
+		p.force += wind * -2;
+	}
+	else if (p.position.v[1] >= 0.0f)
+	{
+		p.force += wind * 1;
+
+		if (keys['w'])
+			p.force += gust;
+	}
+	else if (p.position.v[1] >= -0.6f)
+	{
+		p.force += wind * -1;
+	}
+
+
+	// Apply Gravity Force
+	p.force += gravity * snowGravityFactor * p.mass;
+	// Ideally would calculate air resitance instead of using a gravity factor
+}
+
+GLuint firstUnusedParticle()
+{
+	// Start searching at the last unused particle
+	for (GLuint i = lastUsedParticle; i < numParticles; i++)
+	{
+		if (particles[i].life <= 0.0f)
+		{
+			lastUsedParticle = i;
+			return i;
+		}
+	}
+
+	// Otherwise, do a linear search
+	for (GLuint i = 0; i < lastUsedParticle; i++)
+	{
+		if (particles[i].life <= 0.0f)
+		{
+			lastUsedParticle = i;
+			return i;
+		}
+	}
+
+	// Override first particle if all others are alive
+	lastUsedParticle = 0;
+	return 0;
+}
+
+void respawnParticle(Particle &particle)
+{
+	//GLfloat randomX = ((rand() % 100) - 50) / 1000.0f; // Fountain
+	//GLfloat randomZ = ((rand() % 100) - 50) / 1000.0f; // Fountain
+	/*GLfloat randomRed = 0.0 + ((rand() % 15) / 100.0f);
+	GLfloat randomGreen = 0.3 + ((rand() % 25) / 100.0f); 
+	GLfloat randomBlue = 0.5 + ((rand() % 50) / 100.0f);*/ // Fountains - Random shade of blue
+
+	GLfloat randomX = ((rand() % 1000) - 500) / 250.0f; // Snow
+	GLfloat randomY = 1.5f;
+	GLfloat randomZ = ((rand() % 1000) - 750) / 50.0f; // Snow
+
+	vec4 white = vec4(1.0f, 1.0f, 1.0f, 0.75f);
+	particle.position = vec3(randomX, randomY, randomZ);
+	particle.colour = white;
+	particle.life = 5.0f; // ~5 Seconds
+	particle.mass = 0.05f; 
+	particle.velocity = vec3(0.0f, 0.0f, 0.0f);
+}
+
+
+void updateParticles()
+{
+	// Add new particles
+	for (GLuint i = 0; i < numNewParticles; i++)
+	{
+		int unusedParticle = firstUnusedParticle();
+		respawnParticle(particles[unusedParticle]);
+	}
+
+
+	// Update all particles
+	for (GLuint i = 0; i < numParticles; ++i)
+	{
+		Particle &p = particles[i];
+
+		// Update forces
+		updateForces(p);
+
+		// Update the velocity
+		p.velocity += (p.force / p.mass) * deltaTime;
+
+		// Update the position
+		p.position += p.velocity * deltaTime;
+		
+		// Check for collision
+		if ((dot((p.position - groundVector), groundNormal) < 0.0f) && (dot(groundNormal, p.velocity) < 0.0f))
+		{
+			vec3 velocityNormal = groundNormal * (dot(p.velocity, groundNormal));
+			vec3 velocityTangent = p.velocity - velocityNormal;
+			p.velocity = (velocityTangent * (1 - friction)) - (velocityNormal * resilience);
+			p.position -= groundNormal * (2 * (dot((p.position - groundVector), groundNormal)));
+		}
+
+		// Apply evolution and recycling through the use of a life variable
+		p.life -= deltaTime; // Reduce life
+		if (p.life > 0.0f)
+		{	
+			// Change the colour of the particle (making it more transparent and less white)
+			p.colour.v[0] -= deltaTime / 50.0f;
+			p.colour.v[1] -= deltaTime / 50.0f;
+			p.colour.v[2] -= deltaTime / 50.0f;
+			p.colour.v[3] -= deltaTime / 5.0f;
+		}
+	}
+}
+
 void processInput()
 {
 	if (keys[GLUT_KEY_UP])
@@ -123,152 +252,9 @@ void processInput()
 		exit(0);
 }
 
-void processForces()
-{
-	for (GLuint i = 0; i < numParticles; ++i)
-	{
-		Particle &particle = particles[i];
-		if (particle.life > 0.0f)
-		{
-			
-
-
-			// Clear Forces
-			particle.force = vec3(0.0f, 0.0f, 0.0f);
-
-			// Apply Initial Force from Fountain
-			/*if ((particle.position.v[0] >= -0.05f && particle.position.v[0] <= 0.05f) &&
-				(particle.position.v[2] >= -0.05f &&particle.position.v[2] <= 0.05f))
-			{
-				particle.force = vec3(particle.position.v[0] * 20.0f, 2.0f, particle.position.v[2] * 20.0f);
-			}*/
-
-			
-			
-			// Apply the winds
-			vec3 wind = vec3(0.015f, 0.0f, 0.0f);
-			//vec3 lower_wind = vec3(-0.05f, 0.0f, 0.0f);
-			//vec3 circular_wind = cross(particle.position, normal) * 0.001;
-			//circular_wind.v[1] = 0.0f;
-			//particle.force += circular_wind;
-			if (particle.position.v[1] >= 1.2f && particle.position.v[1] <= 1.5f)
-			{
-				particle.force += wind;
-			}
-			else if (particle.position.v[1] >= 0.6f)
-			{
-				particle.force += wind * -2;
-			}
-			else if (particle.position.v[1] >= 0.0f)
-			{
-				particle.force += wind * 1;
-				vec3 gust = vec3(0.0f, -0.5f, 1.5f);
-				if (keys['w'])
-					particle.force += gust;
-			}
-			else if (particle.position.v[1] >= -0.6f)
-			{
-				particle.force += wind * -1;
-			}
-
-			
-
-			// Apply Gravity Force
-			//particle.force += vec3(0.0f, -0.981f, 0.0f) * particle.mass;
-			particle.force += gravity * snowGravityFactor * particle.mass;
-			// Ideally need to calculate air resitance
-
-			// Calculate the velocity
-			particle.velocity += (particle.force / particle.mass) * deltaTime;
-
-			// Calculate the position
-			particle.position += particle.velocity * deltaTime;
-			
-
-			// Check for collision
-			if ((dot((particle.position - groundVector), groundNormal) < 0.0f) && (dot(groundNormal, particle.velocity) < 0.0f))
-			{
-				vec3 velocityNormal = groundNormal * (dot(particle.velocity, groundNormal));
-				vec3 velocityTangent = particle.velocity - velocityNormal;
-				particle.velocity = (velocityTangent * (1 - friction)) - (velocityNormal * resilience);
-				particle.position -= groundNormal * (2 * (dot((particle.position - groundVector), groundNormal)));
-			}
-		}
-	}
-
-}
-
-// https://learnopengl.com/#!In-Practice/2D-Game/Particles
-GLuint FirstUnusedParticle()
-{
-	// Search from last used particle, this will usually return almost instantly
-	for (GLuint i = lastUsedParticle; i < numParticles; i++) 
-	{
-		if (particles[i].life <= 0.0f) 
-		{
-			lastUsedParticle = i;
-			return i;
-		}
-	}
-	// Otherwise, do a linear search
-	for (GLuint i = 0; i < lastUsedParticle; i++) 
-	{
-		if (particles[i].life <= 0.0f) 
-		{
-			lastUsedParticle = i;
-			return i;
-		}
-	}
-	// Override first particle if all others are alive
-	lastUsedParticle = 0;
-	return 0;
-}
-
-void RespawnParticle(Particle &particle)
-{
-	//GLfloat randomX = ((rand() % 100) - 50) / 1000.0f; // Fountain
-	GLfloat randomX = ((rand() % 1000) - 500) / 250.0f; // Snow
-	//GLfloat randomY = ((rand() % 100) - 50) / 0.75f;
-	GLfloat randomY = 1.5f;
-	//GLfloat randomZ = ((rand() % 100) - 50) / 1000.0f; // Fountain
-	GLfloat randomZ = ((rand() % 1000) - 750) / 50.0f; // Snow
-	GLfloat randomRed = 0.0 + ((rand() % 15) / 100.0f);
-	GLfloat randomGreen = 0.3 + ((rand() % 25) / 100.0f);
-	GLfloat randomBlue = 0.5 + ((rand() % 50) / 100.0f);
-	vec4 white = vec4(1.0f, 1.0f, 1.0f, 0.75f);
-	particle.position = vec3(randomX, randomY, randomZ);
-	//particle.colour = vec4(randomRed, randomGreen, 1.0f, 1.0f);
-	particle.colour = white;
-	particle.life = 5.0f;
-	particle.mass = 0.05f; // Snow
-	particle.velocity = vec3(0.0f, 0.0f, 0.0f);
-}
-
-void updateParticles()
-{
-	// Add new particles
-	for (GLuint i = 0; i < numNewParticles; i++)
-	{
-		int unusedParticle = FirstUnusedParticle();
-		RespawnParticle(particles[unusedParticle]);
-	}
-	// Uupdate all particles
-	for (GLuint i = 0; i < numParticles; ++i)
-	{
-		Particle &p = particles[i];
-		p.life -= deltaTime; // reduce life
-		if (p.life > 0.0f)
-		{	// particle is alive, thus update
-			//p.position += p.velocity * deltaTime;
-			p.colour.v[3] -= deltaTime/5.0f;
-		}
-	}
-}
-
 void updateScene()
 {
 	processInput();
-	processForces();
 	updateParticles();
 	// Draw the next frame
 	glutPostRedisplay();
