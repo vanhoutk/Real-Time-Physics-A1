@@ -35,17 +35,18 @@ bool firstMouse = true;
 bool keys[1024];
 Camera camera(vec3(0.0f, -0.5f, 3.0f));
 enum Meshes { PARTICLE_MESH, PLANE_MESH };
-enum Shaders { SKYBOX, PARTICLE_SHADER, BASIC_TEXTURE_SHADER };
+enum Shaders { SKYBOX_SHADER, PARTICLE_SHADER, BASIC_TEXTURE_SHADER };
 enum Textures { PARTICLE_TEXTURE, GROUND_TEXTURE, WALL_TEXTURE };
 GLfloat cameraSpeed = 0.005f;
 GLfloat deltaTime = 1.0f / 60.0f;
 GLfloat friction = 0.98f;
-GLfloat lastX = 400, lastY = 300;
-GLfloat resilience = 0.01f;
+GLfloat particleLifetime = 5.0f;
+GLfloat restitution = 0.01f;
 GLfloat snowGravityFactor = 0.1f;
 GLuint lastUsedParticle = 0;
+GLuint lastX = 400, lastY = 300;
 GLuint numParticles = 30000;
-GLuint numNewParticles = numParticles/(5*60);
+GLuint numNewParticles = numParticles/((GLuint)particleLifetime *60);
 GLuint shaderProgramID[NUM_SHADERS];
 int screenWidth = 1000;
 int screenHeight = 800;
@@ -173,12 +174,6 @@ GLuint firstUnusedParticle()
 
 void respawnParticle(Particle &particle)
 {
-	//GLfloat randomX = ((rand() % 100) - 50) / 1000.0f; // Fountain
-	//GLfloat randomZ = ((rand() % 100) - 50) / 1000.0f; // Fountain
-	/*GLfloat randomRed = 0.0 + ((rand() % 15) / 100.0f);
-	GLfloat randomGreen = 0.3 + ((rand() % 25) / 100.0f); 
-	GLfloat randomBlue = 0.5 + ((rand() % 50) / 100.0f);*/ // Fountains - Random shade of blue
-
 	GLfloat randomX = ((rand() % 1000) - 500) / 250.0f; // Snow
 	GLfloat randomY = 1.5f;
 	GLfloat randomZ = ((rand() % 1000) - 750) / 50.0f; // Snow
@@ -186,7 +181,7 @@ void respawnParticle(Particle &particle)
 	vec4 white = vec4(1.0f, 1.0f, 1.0f, 0.75f);
 	particle.position = vec3(randomX, randomY, randomZ);
 	particle.colour = white;
-	particle.life = 5.0f; // ~5 Seconds
+	particle.life = particleLifetime; // ~5 Seconds
 	particle.mass = 0.05f; 
 	particle.velocity = vec3(0.0f, 0.0f, 0.0f);
 }
@@ -221,7 +216,7 @@ void updateParticles()
 		{
 			vec3 velocityNormal = groundNormal * (dot(p.velocity, groundNormal));
 			vec3 velocityTangent = p.velocity - velocityNormal;
-			p.velocity = (velocityTangent * (1 - friction)) - (velocityNormal * resilience);
+			p.velocity = (velocityTangent * (1 - friction)) - (velocityNormal * restitution);
 			p.position -= groundNormal * (2 * (dot((p.position - groundVector), groundNormal)));
 		}
 
@@ -268,7 +263,7 @@ void init()
 		shaderProgramID[i] = CompileShaders(vertexShaderNames[i], fragmentShaderNames[i]);
 	}
 
-	skyboxMesh = Mesh(&shaderProgramID[SKYBOX]);
+	skyboxMesh = Mesh(&shaderProgramID[SKYBOX_SHADER]);
 	skyboxMesh.setupSkybox(skyboxTextureFiles);
 
 	groundMesh = Mesh(&shaderProgramID[BASIC_TEXTURE_SHADER]);
@@ -322,13 +317,13 @@ void processMouse(int x, int y)
 		firstMouse = false;
 	}
 
-	GLfloat xoffset = x - lastX;
-	GLfloat yoffset = lastY - y;
+	int xoffset = x - lastX;
+	int yoffset = lastY - y;
 
 	lastX = x;
 	lastY = y;
 
-	camera.ProcessMouseMovement(xoffset, yoffset);
+	camera.ProcessMouseMovement((GLfloat)xoffset, (GLfloat)yoffset);
 }
 
 void mouseWheel(int button, int dir, int x, int y)
@@ -340,7 +335,7 @@ void mouseWheel(int button, int dir, int x, int y)
  */
 int main(int argc, char** argv) 
 {
-	srand(time(NULL));
+	srand((unsigned int)time(NULL));
 
 	// Set up the window
 	glutInit(&argc, argv);
